@@ -18,6 +18,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -y install \
   binutils \
   git \
+  libpipewire-0.3-dev \
+  pipewire \
   locales \
   lsb-release \
   ninja-build \

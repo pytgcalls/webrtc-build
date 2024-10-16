@@ -18,6 +18,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -y install \
   build-essential \
   curl \
+  libpipewire-0.3-dev \
+  pipewire \
   git \
   gtk+-3.0 \
   lbzip2 \
