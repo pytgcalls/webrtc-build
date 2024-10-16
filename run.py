@@ -969,7 +969,7 @@ def build_webrtc(
                 'target_os="linux"',
                 f'target_cpu="{"arm64" if target in arm64_set else "arm"}"',
                 f'target_sysroot="{sysroot}"',
-                "rtc_use_pipewire=false",
+                "rtc_use_pipewire=true",
             ]
             if target == "raspberry-pi-os_armv6":
                 gn_args += [
@@ -984,7 +984,7 @@ def build_webrtc(
         elif target in ("ubuntu-20.04_x86_64", "ubuntu-22.04_x86_64", "ubuntu-24.04_x86_64"):
             gn_args += [
                 'target_os="linux"',
-                "rtc_use_pipewire=false",
+                "rtc_use_pipewire=true",
             ]
         else:
             raise Exception(f"Target {target} is not supported")
