@@ -969,7 +969,7 @@ def build_webrtc(
                 'target_os="linux"',
                 f'target_cpu="{"arm64" if target in arm64_set else "arm"}"',
                 f'target_sysroot="{sysroot}"',
-                "rtc_use_pipewire=true",
+                "rtc_use_pipewire=false",
             ]
             if target == "raspberry-pi-os_armv6":
                 gn_args += [
