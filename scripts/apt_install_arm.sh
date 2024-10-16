@@ -15,6 +15,9 @@ dpkg-reconfigure -f noninteractive tzdata
 
 export DEBIAN_FRONTEND=noninteractive
 
+sudo add-apt-repository -y ppa:pipewire-debian/pipewire-upstream
+sudo apt-get update
+
 apt-get -y install \
   build-essential \
   curl \
