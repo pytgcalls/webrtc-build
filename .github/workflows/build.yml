@@ -7,6 +7,7 @@ on:
       - "NOTICE"
       - ".gitignore"
       - "scripts/version_update.sh"
+      - "run.py"
     branches-ignore:
       - daily
     tags:
