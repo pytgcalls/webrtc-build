@@ -659,7 +659,6 @@ def init_rootfs(sysroot: str, config: MultistrapConfig, force=False):
 
 COMMON_GN_ARGS = [
     "rtc_include_tests=false",
-    "rtc_use_h264=false",
     "is_component_build=false",
     "rtc_build_examples=false",
     "use_rtti=true",
@@ -766,6 +765,7 @@ def build_webrtc_ios(
         "use_lld=false",
         "rtc_enable_objc_symbol_export=true",
         "treat_warnings_as_errors=false",
+        "rtc_use_h264=false",
         *COMMON_GN_ARGS,
     ]
 
@@ -893,6 +893,7 @@ def build_webrtc_android(
     gn_args_base = [
         f"is_debug={'true' if debug else 'false'}",
         f"is_java_debug={'true' if debug else 'false'}",
+        "rtc_use_h264=false",
         *COMMON_GN_ARGS,
     ]
 
@@ -966,6 +967,7 @@ def build_webrtc(
     if not os.path.exists(os.path.join(webrtc_build_dir, "args.gn")) or gen:
         gn_args = [
             f"is_debug={'true' if debug else 'false'}",
+            f"rtc_use_h264={'true' if target in ['ubuntu-20.04_x86_64'] else 'false'}",
             *COMMON_GN_ARGS,
         ]
         if target in ["windows_x86_64", "windows_arm64"]:

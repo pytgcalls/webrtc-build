@@ -7,8 +7,7 @@ on:
       - "NOTICE"
       - ".gitignore"
       - "scripts/version_update.sh"
-    branches-ignore:
-      - daily
+      - "run.py"
     tags:
       - "*"
 jobs:
