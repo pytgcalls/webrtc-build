@@ -198,7 +198,8 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
-        "fix_windows_boringssl_string_util.patch",
+        "fix_moved_function_call.patch",
+        "windows_add_optional.patch",
     ],
     "windows_arm64": [
         "4k.patch",
@@ -211,7 +212,8 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
-        "fix_windows_boringssl_string_util.patch",
+        "fix_moved_function_call.patch",
+        "windows_add_optional.patch",
     ],
     "macos_arm64": [
         "add_deps.patch",
@@ -219,7 +221,6 @@ PATCHES = {
         "revive_proxy.patch",
         "add_license_dav1d.patch",
         "macos_screen_capture.patch",
-        "ios_simulcast.patch",
         "ssl_verify_callback_with_native_handle.patch",
         "macos_use_xcode_clang.patch",
         "h265.patch",
@@ -227,6 +228,8 @@ PATCHES = {
         "arm_neon_sve_bridge.patch",
         "dav1d_config_change.patch",
         "fix_perfetto.patch",
+        "ios_fix_optional.patch",
+        "fix_moved_function_call.patch",
     ],
     "ios": [
         "add_deps.patch",
@@ -235,7 +238,6 @@ PATCHES = {
         "add_license_dav1d.patch",
         "macos_screen_capture.patch",
         "ios_manual_audio_input.patch",
-        "ios_simulcast.patch",
         "ssl_verify_callback_with_native_handle.patch",
         "ios_build.patch",
         "ios_proxy.patch",
@@ -244,6 +246,8 @@ PATCHES = {
         "arm_neon_sve_bridge.patch",
         "dav1d_config_change.patch",
         "fix_perfetto.patch",
+        "ios_fix_optional.patch",
+        "fix_moved_function_call.patch",
     ],
     "android": [
         "add_deps.patch",
@@ -259,6 +263,7 @@ PATCHES = {
         "h265.patch",
         "h265_android.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "raspberry-pi-os_armv6": [
         "nacl_armv6_2.patch",
@@ -269,6 +274,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "raspberry-pi-os_armv7": [
         "add_deps.patch",
@@ -278,6 +284,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "raspberry-pi-os_armv8": [
         "add_deps.patch",
@@ -287,6 +294,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-20.04_armv8": [
         "add_deps.patch",
@@ -296,6 +304,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-22.04_armv8": [
         "add_deps.patch",
@@ -305,6 +314,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-24.04_armv8": [
         "add_deps.patch",
@@ -314,6 +324,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-20.04_x86_64": [
         "add_deps.patch",
@@ -323,6 +334,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-22.04_x86_64": [
         "add_deps.patch",
@@ -332,6 +344,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
     "ubuntu-24.04_x86_64": [
         "add_deps.patch",
@@ -341,6 +354,7 @@ PATCHES = {
         "ssl_verify_callback_with_native_handle.patch",
         "h265.patch",
         "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
     ],
 }
 
@@ -391,7 +405,19 @@ def apply_patches(target, patch_dir, src_dir, patch_until, commit_patch):
             apply_patch(os.path.join(patch_dir, patch), src_dir, 1)
             if patch == patch_until and not commit_patch:
                 break
-            cmd(["gclient", "recurse", "git", "add", "--", ":!*.orig", ":!*.rej"])
+            cmd(
+                [
+                    "gclient",
+                    "recurse",
+                    "git",
+                    "add",
+                    "--",
+                    ":!*.orig",
+                    ":!*.rej",
+                    ":!:__config_site",
+                    ":!:__assertion_handler",
+                ]
+            )
             cmd(
                 [
                     "gclient",
@@ -479,7 +505,20 @@ def diff_webrtc(source_dir, webrtc_source_dir):
 
     src_dir = os.path.join(webrtc_source_dir, "src")
     with cd(src_dir):
-        cmd(["gclient", "recurse", "git", "add", "-N", "--", ":!*.orig", ":!*.rej"])
+        cmd(
+            [
+                "gclient",
+                "recurse",
+                "git",
+                "add",
+                "-N",
+                "--",
+                ":!*.orig",
+                ":!*.rej",
+                ":!:__config_site",
+                ":!:__assertion_handler",
+            ]
+        )
         dirs = _deps_dirs(src_dir)
         for dir in dirs:
             with cd(dir):
@@ -1063,6 +1102,7 @@ def copy_headers(webrtc_src_dir, webrtc_package_dir, target):
                 os.path.join(webrtc_package_dir, "include"),
                 "*.h",
                 "*.hpp",
+                "*.inc",
                 "/S",
                 "/NP",
                 "/NFL",
@@ -1081,6 +1121,7 @@ def copy_headers(webrtc_src_dir, webrtc_package_dir, target):
                 "--include=*/",
                 "--include=*.h",
                 "--include=*.hpp",
+                "--include=*.inc",
                 "--exclude=*",
                 os.path.join(webrtc_src_dir, "."),
                 os.path.join(webrtc_package_dir, "include", "."),
