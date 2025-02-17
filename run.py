@@ -221,6 +221,7 @@ PATCHES = {
         "revive_proxy.patch",
         "add_license_dav1d.patch",
         "macos_screen_capture.patch",
+        "ios_simulcast.patch",
         "ssl_verify_callback_with_native_handle.patch",
         "macos_use_xcode_clang.patch",
         "h265.patch",
@@ -238,6 +239,7 @@ PATCHES = {
         "add_license_dav1d.patch",
         "macos_screen_capture.patch",
         "ios_manual_audio_input.patch",
+        "ios_simulcast.patch",
         "ssl_verify_callback_with_native_handle.patch",
         "ios_build.patch",
         "ios_proxy.patch",
@@ -248,6 +250,7 @@ PATCHES = {
         "fix_perfetto.patch",
         "ios_fix_optional.patch",
         "fix_moved_function_call.patch",
+        "ios_add_scale_resolution_down_to.patch",
     ],
     "android": [
         "add_deps.patch",
@@ -264,6 +267,7 @@ PATCHES = {
         "h265_android.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "android_add_scale_resolution_down_to.patch",
     ],
     "raspberry-pi-os_armv6": [
         "nacl_armv6_2.patch",
