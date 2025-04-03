@@ -199,7 +199,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
-        "windows_add_optional.patch",
+        "remove_crel.patch",
     ],
     "windows_arm64": [
         "4k.patch",
@@ -213,7 +213,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
-        "windows_add_optional.patch",
+        "remove_crel.patch",
     ],
     "macos_arm64": [
         "add_deps.patch",
@@ -229,8 +229,9 @@ PATCHES = {
         "arm_neon_sve_bridge.patch",
         "dav1d_config_change.patch",
         "fix_perfetto.patch",
-        "ios_fix_optional.patch",
         "fix_moved_function_call.patch",
+        # 既に macos_use_xcode_clang.patch で同じ内容を適用済み
+        # "remove_crel.patch",
     ],
     "ios": [
         "add_deps.patch",
@@ -248,9 +249,10 @@ PATCHES = {
         "arm_neon_sve_bridge.patch",
         "dav1d_config_change.patch",
         "fix_perfetto.patch",
-        "ios_fix_optional.patch",
         "fix_moved_function_call.patch",
         "ios_add_scale_resolution_down_to.patch",
+        # 既に ios_build.patch で同じ内容を適用済み
+        # "remove_crel.patch",
     ],
     "android": [
         "add_deps.patch",
@@ -268,6 +270,7 @@ PATCHES = {
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
         "android_add_scale_resolution_down_to.patch",
+        "remove_crel.patch",
     ],
     "raspberry-pi-os_armv6": [
         "nacl_armv6_2.patch",
@@ -279,6 +282,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "raspberry-pi-os_armv7": [
         "add_deps.patch",
@@ -289,6 +293,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "raspberry-pi-os_armv8": [
         "add_deps.patch",
@@ -299,6 +304,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-20.04_armv8": [
         "add_deps.patch",
@@ -309,6 +315,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-22.04_armv8": [
         "add_deps.patch",
@@ -319,6 +326,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-24.04_armv8": [
         "add_deps.patch",
@@ -329,6 +337,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-20.04_x86_64": [
         "add_deps.patch",
@@ -339,6 +348,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-22.04_x86_64": [
         "add_deps.patch",
@@ -349,6 +359,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
     "ubuntu-24.04_x86_64": [
         "add_deps.patch",
@@ -359,6 +370,7 @@ PATCHES = {
         "h265.patch",
         "fix_perfetto.patch",
         "fix_moved_function_call.patch",
+        "remove_crel.patch",
     ],
 }
 
@@ -375,6 +387,7 @@ def apply_patch(patch, dir, depth):
                     "--ignore-space-change",
                     "--ignore-whitespace",
                     "--whitespace=nowarn",
+                    "--reject",
                     patch,
                 ]
             )
@@ -668,6 +681,8 @@ COMMON_GN_ARGS = [
     "use_rtti=true",
     "rtc_build_tools=false",
     "rtc_use_perfetto=false",
+    "libyuv_include_tests=false",
+    "libyuv_use_sme=false",
 ]
 
 WEBRTC_BUILD_TARGETS_MACOS_COMMON = [
@@ -1012,7 +1027,6 @@ def build_webrtc(
                 f'target_cpu="{"arm64" if target in arm64_set else "arm"}"',
                 f'target_sysroot="{sysroot}"',
                 "rtc_use_pipewire=false",
-                "libyuv_use_sme=false",
             ]
             if target == "raspberry-pi-os_armv6":
                 gn_args += [
@@ -1045,8 +1059,14 @@ def build_webrtc(
     else:
         ar = os.path.join(webrtc_src_dir, "third_party/llvm-build/Release+Asserts/bin/llvm-ar")
 
-    # ar で libwebrtc.a を生成する
-    if target not in ["windows_x86_64", "windows_arm64"]:
+    if target in ["windows_x86_64", "windows_arm64"]:
+        # Windows は ar する代わりにファイルをコピーする
+        shutil.copyfile(
+            os.path.join(webrtc_build_dir, "obj", "webrtc.lib"),
+            os.path.join(webrtc_build_dir, "webrtc.lib"),
+        )
+    else:
+        # ar で libwebrtc.a を生成する
         archive_objects(
             ar, os.path.join(webrtc_build_dir, "obj"), os.path.join(webrtc_build_dir, "libwebrtc.a")
         )
@@ -1258,7 +1278,7 @@ def package_webrtc(
     # ライブラリ
     if target in ["windows_x86_64", "windows_arm64"]:
         files = [
-            (["obj", "webrtc.lib"], ["lib", "webrtc.lib"]),
+            (["webrtc.lib"], ["lib", "webrtc.lib"]),
         ]
     elif target in ("macos_arm64",):
         files = [
@@ -1311,6 +1331,18 @@ def package_webrtc(
             with tarfile.open(f"webrtc.{target}.tar.gz", "w:gz") as f:
                 for file in enum_all_files("webrtc", "."):
                     f.add(name=file, arcname=file)
+
+    # target が ios のときに WebRTC.xcframework を zip 化
+    if target == "ios":
+        frameworks_dir = os.path.join(package_dir, "webrtc", "Frameworks")
+        with cd(frameworks_dir):
+            with zipfile.ZipFile("WebRTC.xcframework.zip", "w") as f:
+                for file in enum_all_files("WebRTC.xcframework", "."):
+                    f.write(filename=file, arcname=file)
+        # WebRTC.xcframework.zip を package_dir に移動
+        src_xcframework_zip_path = os.path.join(frameworks_dir, "WebRTC.xcframework.zip")
+        dst_xcframework_zip_path = os.path.join(package_dir, "WebRTC.xcframework.zip")
+        shutil.move(src_xcframework_zip_path, dst_xcframework_zip_path)
 
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
