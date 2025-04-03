@@ -322,10 +322,6 @@ rtc_use_perfetto=false した時にコンパイルエラーになる問題を修
 M126 で perfetto を使うようになったけど、これは rtc_use_perfetto=false で無効にできるため試してみたところ、必要な部分が ifdef で囲まれていなかったためコンパイルエラーになった。
 このパッチはその問題を修正するもの。
 
-## ios_fix_optional.patch
-
-Abseil ライブラリではなく C++ 標準ライブラリを利用するようにするパッチ。
-
 ## fix_moved_function_call.patch
 
 SesseionDescription のコールバック実行中に PeerConnection が破棄された時にクラッシュする問題を修正するパッチ。
@@ -336,6 +332,23 @@ https://github.com/shiguredo/sora-cpp-sdk/blob/e1257a3e358e62512c0c77db5ba82f90e
 
 多分パッチを送った方がいいやつ。
 
-# windows_add_optional.patch
+## ios_simulcast.patch
 
-Windows で std::optional が参照エラーになるのを改善するパッチ。
+iOS でのサイマルキャストのサポートを追加するパッチ。この実装は C++ の `SimulcastEncoderAdapter` の簡単なラッパーであり、既存の仕様に破壊的変更も行わない。
+以下の API を追加する。
+
+- `RTCVideoEncoderFactorySimulcast`
+- `RTCVideoEncoderSimulcast`
+
+同等の機能が本家に実装されたら削除する。
+
+[libwebrtcの変更](https://webrtc-review.googlesource.com/c/src/+/358866)を取り込んだため、従来の ios_simulcast.patch とは異なる。
+
+特に scalabilityMode は libwebrtc 側で NSString 記述となったため RTCScalabilityMode ENUM を削除した。変数名は同じだが NSNumber から NSString に型が変更になっているので注意すること。
+
+## remove_crel.patch
+
+[CREL](https://maskray.me/blog/2024-03-09-a-compact-relocation-format-for-elf) (compact relocation) を有効にするオプションを削除するパッチ。
+CREL は LLVM のリンカ(lld)特有の機能なので、これを有効にすると GNU のリンカ(ld)でリンクできなくなってしまうので削除する。
+
+手間の問題でパッチを当ててるけど、既存の webrtc-build を使ったアプリケーションを lld に置き換えた方が筋が良いかもしれない。
