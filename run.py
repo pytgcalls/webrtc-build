@@ -175,6 +175,81 @@ def get_depot_tools(source_dir, fetch=False):
     return dir
 
 
+def patch_depot_tools_for_musl(depot_tools_dir):
+    """depot_tools 内の glibc 向けバイナリ (vpython3, vpython, cipd 等) を
+    musl 環境で動作するようにラッパースクリプトで置き換える。
+    また、depot_tools が vpython 経由でインストールする Python パッケージを pip でインストールする。"""
+    python3_path = shutil.which("python3")
+    if python3_path is None:
+        raise Exception("python3 not found in PATH")
+
+    # vpython3/vpython を、vpython 固有の引数を除去して system python3 に委譲する
+    # ラッパースクリプトで置き換える。
+    # 単純なシンボリックリンクでは vpython3 -vpython-spec ... -- script.py のような
+    # 呼び出しで Python が -vpython-spec を自身のフラグとして解釈してしまう。
+    wrapper_script = f"""#!/bin/bash
+# vpython3 wrapper for musl: strips vpython-specific arguments
+# and delegates to system python3.
+# -vpython-tool install is a no-op (packages are installed via pip).
+for arg in "$@"; do
+    if [[ "$arg" == "-vpython-tool" ]]; then
+        exit 0
+    fi
+done
+args=()
+skip_next=false
+for arg in "$@"; do
+    if $skip_next; then
+        skip_next=false
+        continue
+    fi
+    case "$arg" in
+        -vpython-spec|-vpython-log-level|-vpython-root)
+            skip_next=true
+            ;;
+        -vpython-*|-vpython3-*)
+            ;;
+        --)
+            ;;
+        *)
+            args+=("$arg")
+            ;;
+    esac
+done
+exec {python3_path} "${{args[@]}}"
+"""
+    for name in ["vpython3", "vpython"]:
+        path = os.path.join(depot_tools_dir, name)
+        rm_rf(path)
+        with open(path, "w") as f:
+            f.write(wrapper_script)
+        os.chmod(path, 0o755)
+        logging.info(f"musl: created vpython wrapper {path}")
+
+    # vpython が通常 cipd 経由でインストールする Python パッケージをシステムの pip でインストールする
+    # depot_tools の .vpython3 で指定されているバージョンに合わせる
+    cmd(
+        [
+            python3_path, "-m", "pip", "install",
+            "httplib2==0.13.1",
+            "six==1.10.0",
+            "setuptools",
+        ],
+        resolve=False,
+    )
+
+    # depot_tools の gn, ninja ラッパーは cipd 経由で glibc バイナリをダウンロードするため
+    # musl 環境では動作しない。システムにインストール済みのバイナリで置き換える。
+    for tool_name in ["gn", "ninja"]:
+        system_path = shutil.which(tool_name)
+        if system_path is None:
+            raise Exception(f"{tool_name} not found in PATH. Install it with: apk add {tool_name}")
+        wrapper_path = os.path.join(depot_tools_dir, tool_name)
+        rm_rf(wrapper_path)
+        os.symlink(system_path, wrapper_path)
+        logging.info(f"musl: {wrapper_path} -> {system_path}")
+
+
 PATCHES = {
     "windows_x86_64": [
         "4k.patch",
@@ -346,6 +421,17 @@ PATCHES = {
         "remove_crel.patch",
     ],
     "ubuntu-22.04_x86_64": [
+        "add_deps.patch",
+        "4k.patch",
+        "revive_proxy.patch",
+        "add_license_dav1d.patch",
+        "ssl_verify_callback_with_native_handle.patch",
+        "h265.patch",
+        "fix_perfetto.patch",
+        "fix_moved_function_call.patch",
+        "remove_crel.patch",
+    ],
+    "muslinux_x86_64": [
         "add_deps.patch",
         "4k.patch",
         "revive_proxy.patch",
@@ -1079,6 +1165,12 @@ def build_webrtc(
                 'target_os="linux"',
                 "rtc_use_pipewire=true",
             ]
+        elif target in ("muslinux_x86_64",):
+            gn_args += [
+                'target_os="linux"',
+                "rtc_use_pipewire=false",
+                "use_custom_libcxx=false",
+            ]
         else:
             raise Exception(f"Target {target} is not supported")
 
@@ -1385,6 +1477,7 @@ TARGETS = [
     "macos_arm64",
     "ubuntu-22.04_x86_64",
     "ubuntu-24.04_x86_64",
+    "muslinux_x86_64",
     "ubuntu-20.04_armv8",
     "ubuntu-22.04_armv8",
     "ubuntu-24.04_armv8",
@@ -1406,16 +1499,20 @@ def check_target(target):
         logging.info(f"OS: {platform.system()}")
         return target in ("macos_arm64", "ios", "ios_sdk")
     elif platform.system() == "Linux":
-        release = read_version_file("/etc/os-release")
-        os = release["NAME"]
-        logging.info(f"OS: {os}")
-        if os != "Ubuntu":
-            return False
-
         # x86_64 環境以外ではビルド不可
         arch = platform.machine()
         logging.info(f"Arch: {arch}")
         if arch not in ("AMD64", "x86_64"):
+            return False
+
+        # muslinux はどの Linux ディストリビューションでもビルド可能
+        if target in ("muslinux_x86_64",):
+            return True
+
+        release = read_version_file("/etc/os-release")
+        os = release["NAME"]
+        logging.info(f"OS: {os}")
+        if os != "Ubuntu":
             return False
 
         # クロスコンパイルなので Ubuntu だったら任意のバージョンでビルド可能（なはず）
@@ -1687,6 +1784,15 @@ def main():
         os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"] = "0"
         os.environ["PYTHONIOENCODING"] = "utf-8"
 
+    if args.target in ("muslinux_x86_64",):
+        # depot_tools は glibc 向けにビルドされたバイナリ (Python, cipd, gn, ninja 等) を
+        # 自動的にダウンロードするが、これらは musl 環境では動作しないため、
+        # システムにインストール済みのツールを使用するように設定する
+        os.environ["DEPOT_TOOLS_BOOTSTRAP_PYTHON3"] = "0"
+        os.environ["VPYTHON_BYPASS"] = "manually managed python not in chromium"
+        os.environ["GCLIENT_PY3"] = "1"
+        os.environ["NINJA_SUMMARIZE_BUILD"] = "1"
+
     version_file = read_version_file("VERSION")
     version_info = VersionInfo(
         webrtc_version=version_file["WEBRTC_VERSION"],
@@ -1706,6 +1812,8 @@ def main():
                 init_rootfs(sysroot, MULTISTRAP_CONFIGS[args.target], args.rootfs_fetch_force)
 
             dir = get_depot_tools(source_dir, fetch=args.depottools_fetch)
+            if args.target in ("muslinux_x86_64",):
+                patch_depot_tools_for_musl(dir)
             add_path(dir)
             if args.target in ["windows_x86_64", "windows_arm64"]:
                 cmd(["git", "config", "--global", "core.longpaths", "true"])
@@ -1768,6 +1876,8 @@ def main():
 
         with cd(BASE_DIR):
             dir = get_depot_tools(source_dir, fetch=False)
+            if args.target in ("muslinux_x86_64",):
+                patch_depot_tools_for_musl(dir)
             add_path(dir)
             fetch_webrtc(
                 source_dir=source_dir,
@@ -1782,6 +1892,8 @@ def main():
 
         with cd(BASE_DIR):
             dir = get_depot_tools(source_dir, fetch=False)
+            if args.target in ("muslinux_x86_64",):
+                patch_depot_tools_for_musl(dir)
             add_path(dir)
             revert_webrtc(
                 source_dir=source_dir,
@@ -1797,6 +1909,8 @@ def main():
 
         with cd(BASE_DIR):
             dir = get_depot_tools(source_dir, fetch=False)
+            if args.target in ("muslinux_x86_64",):
+                patch_depot_tools_for_musl(dir)
             add_path(dir)
             diff_webrtc(
                 source_dir=source_dir,
@@ -1807,6 +1921,8 @@ def main():
         mkdir_p(package_dir)
         with cd(BASE_DIR):
             dir = get_depot_tools(source_dir, fetch=args.depottools_fetch)
+            if args.target in ("muslinux_x86_64",):
+                patch_depot_tools_for_musl(dir)
             add_path(dir)
 
             package_webrtc(

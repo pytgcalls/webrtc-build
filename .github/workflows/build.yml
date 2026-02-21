@@ -168,6 +168,27 @@ jobs:
         with:
           name: webrtc.${{ matrix.platform.name }}.tar.gz
           path: _package/${{ matrix.platform.name }}/webrtc.${{ matrix.platform.name }}.tar.gz
+  build-muslinux:
+    runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/pytgcalls/ntgcalls/muslinux-x86_64:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install build tools
+        run: apk add --no-cache gn ninja-build samurai
+      - name: Setup Git User
+        run: |
+          git config --global user.name  "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+      - name: Build muslinux_x86_64
+        run: |
+          python3 run.py build muslinux_x86_64 --no-history
+          python3 run.py package muslinux_x86_64
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webrtc.muslinux_x86_64.tar.gz
+          path: _package/muslinux_x86_64/webrtc.muslinux_x86_64.tar.gz
   create-release:
     name: Create Release
     if: contains(github.ref, 'tags/m')
@@ -175,6 +196,7 @@ jobs:
       - build-windows
       - build-macos
       - build-linux
+      - build-muslinux
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -196,6 +218,9 @@ jobs:
       - uses: ./.github/actions/download
         with:
           platform: ubuntu-22.04_x86_64
+      - uses: ./.github/actions/download
+        with:
+          platform: muslinux_x86_64
       - uses: ./.github/actions/download
         with:
           platform: android
