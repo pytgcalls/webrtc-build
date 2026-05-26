@@ -1,10 +1,11 @@
+﻿Updating depot_tools...
 diff --git a/BUILD.gn b/BUILD.gn
-index 5bbc5b7..b7cb3fb 100644
+index 40ac574..7772dd4 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -567,6 +567,13 @@ if (!build_with_chromium) {
+@@ -555,6 +555,13 @@ if (!build_with_chromium) {
+       "pc:libjingle_peerconnection",
        "pc:rtc_pc",
-       "sdk",
        "video",
 +      "modules/audio_device:audio_device_module_from_input_and_output",
 +      "//third_party/zlib",

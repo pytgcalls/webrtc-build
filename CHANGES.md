@@ -29,6 +29,96 @@ VERSION ファイルを上げただけの場合は変更履歴記録は不要。
 
 ## タイムライン
 
+- 2026-05-07 [UPDATE] m149 ブランチのビルドエラーに対する対応
+  - m149 で scalabilityMode が標準実装されたため、ios_simulcast.patch から追加部分を削除する
+    - 対象コミット: https://source.chromium.org/chromium/_/webrtc/src/+/774a7fc42c0279b9f2ee4cfd899f6ea8fc309800
+  - RTCDefaultVideoEncoderFactory の拡張子変更（.m → .mm）に追従し、以下のパッチを更新する
+    - h265_ios.patch
+    - ios_simulcast.patch
+  - m149 の libwebrtc 変更に合わせて、以下のパッチを更新
+    - revive_proxy.patch
+    - ios_proxy.patch
+    - ios_add_scale_resolution_down_to.patch
+    - android_simulcast.patch
+    - android_audio_pause_resume.patch
+    - android_hardware_video_encoder.patch
+  - dav1d_config_change.patch の末尾空行を修正
+  - @voluntas
+- 2026-05-05 [RELEASE] m148.7778.7.0
+  - @torikizi
+- 2026-04-30 [RELEASE] m148.7778.6.0
+  - @torikizi
+- 2026-04-23 [RELEASE] m148.7778.5.0
+  - @torikizi
+- 2026-04-22 [RELEASE] m148.7778.4.0
+  - @torikizi
+- 2026-04-16 [UPDATE] m148 ブランチのビルドエラーに対する対応
+  - h265.patch の単純なパッチ適用エラーを修正する
+  - libwebrtc の ArrayView から std::span への移行によって h265_vps_parser.cc の include が `array_view.h` から `span` に変わったことに伴う単純なパッチ適用エラーを修正する
+    - 参考 : https://issuetracker.google.com/issues/439801349
+  - @torikizi
+- 2026-04-06 [RELEASE] m146.7680.6.1
+  - @zztkm
+- 2026-04-06 [ADD] TURN-TLS 接続でクライアント証明書を設定する機能を Android SDK から使えるようにする
+  - @zztkm
+- 2026-04-01 [RELEASE] m146.7680.6.0
+  - @torikizi
+- 2026-03-31 [RELEASE] m147.7727.9.0
+  - @torikizi
+- 2026-03-27 [RELEASE] m147.7727.8.0
+  - @torikizi
+- 2026-03-27 [RELEASE] m146.7680.5.0
+  - @torikizi
+- 2026-03-18 [RELEASE] m147.7727.6.0
+  - @miosakuma
+- 2026-03-18 [UPDATE] m147 ブランチのビルドエラーに対する対応
+  - h265_ios.patch について、ArrayView から std::span へ移行する
+     - libwebrtc の ArrayView から std::span への移行に追従する
+     - 参考 : https://issuetracker.google.com/issues/439801349
+  - h265_ios.patch の単純なパッチ適用エラーを修正する
+  - android_simulcast.patch について sdk/android の simulcast_jni にenvironment_construction を追加する
+    - libwertc の以下のコミットにより allow_poison に environment_construction が追加されたため、android_simulcast.patch にも同様の変更を加える
+      - https://source.chromium.org/chromium/_/webrtc/src/+/7962f775089e67780c29381f086485d810af1385
+  - android_proxy.patch の単純なパッチ適用エラーを修正する
+  - @miosakuma
+- 2026-03-18 [RELEASE] m146.7680.3.1
+  - @zztkm
+- 2026-03-17 [ADD] TURN-TLS 接続でクライアント証明書を設定する機能を追加する
+  - @zztkm
+- 2026-03-16 [UPDATE] Docker Image の削除コマンドをコメントアウトアウトする
+  - 不定期に `failed to connect to the docker API at npipe:////./pipe/docker_engine;` というエラーが出て Disk Cleanup が失敗することがあったためコメントアウトする
+  - Docker Image を削除しなくても libwebrtc のビルドするためのディスク容量が足りているため削除する
+  - @zztkm
+- 2026-03-13 [RELEASE] m146.7680.3.0
+  - @miosakuma
+- 2026-03-10 [RELEASE] m146.7680.1.0
+  - @torikizi
+- 2026-03-09 [RELEASE] m146.7680.0.1
+  - @t-miya
+- 2026-03-09 [ADD] iOS SDK 向けの RTCAudioDeviceModule に音声バイパスを設定できるコンストラクタを追加する
+  - ios_audio_pause_resume.patch への追加
+  - @t-miya
+- 2026-03-06 [ADD] RTCSSLCertificateVerifier に verifyChain を追加する
+  - `SSLCertificateVerifier::VerifyChain(const SSLCertChain&)` と ObjC の `RTCSSLCertificateVerifier` を接続する ObjC/C++ ブリッジを追加する
+  - `verifyChain:` 未実装時は `verify:` へフォールバックする
+  - @zztkm
+- 2026-02-27 [RELEASE] m146.7680.0.0
+  - @miosakuma
+- 2026-02-27 [UPDATE] m146 ブランチのビルドエラーに対する対応
+  - fix_perfetto.patch を削除する
+    - m146 の libwebrtc で修正されパッチが不要となったため削除する
+      - 修正コミット : https://source.chromium.org/chromium/_/webrtc/src/+/4354263f56b6ffb11eeec5768c2d8d19329f5bcf
+  - android_fixsegv.patch の一部分を削除する
+    - m146 の libwebrtc で同内容の修正がされたため、修正された箇所について削除する
+      - 修正コミット : https://source.chromium.org/chromium/_/webrtc/src/+/4c8e0efeaf96dd565c1934e40a80ef9c7fe44f9b
+      - 修正コミット : https://source.chromium.org/chromium/_/webrtc/src/+/ebe20e49c945deb4f4740eccdc06eae013036aba
+  - android_proxy.patch の一部分を削除する
+    - m146 の libwebrtc で同内容の変更が行われたため該当箇所を削除する
+      - 対象コミット : https://source.chromium.org/chromium/_/webrtc/src/+/eee78e7541901da05e34dd5301f3609a8bd9b30f     
+  - unsafe_buffers_optout_list.patch を追加する
+    - unsafe-buffer-usage ビルドエラーが発生しないよう、パッチで作成するファイルをチェック除外リストに含める
+  - windows_add_deps.patch のズレを修正する
+  - @miosakuma
 - 2026-01-29 [RELEASE] m145.7632.0.0
   - @t-miya
 - 2026-01-29 [FIX] m145 Android ターゲットのビルドエラーを修正する

@@ -20,9 +20,9 @@ jobs:
           - name: windows_arm64
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: python3 --version
@@ -30,7 +30,14 @@ jobs:
         run: |
           Get-PSDrive
           # Cache 済み Docker Image の削除
-          docker rmi $(docker images -q -a)
+          #
+          # Docker Image の削除コマンドをコメントアウトアウトした背景
+          #
+          # `failed to connect to the docker API at npipe:////./pipe/docker_engine;` というエラーが出て
+          # Disk Cleanup が失敗する場合があったため Docker Image の削除コマンドはコメントアウトする
+          #
+          # docker rmi $(docker images -q -a)
+
           # Android SDK の削除
           if ($Env:ANDROID_HOME) {
             Remove-Item -Recurse -Force $Env:ANDROID_HOME -ErrorAction Ignore
@@ -58,7 +65,7 @@ jobs:
           python3 run.py build ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build' --no-history
           python3 run.py package ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build'
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: webrtc.${{ matrix.platform.name }}.zip
           path: _package/${{ matrix.platform.name }}/webrtc.${{ matrix.platform.name }}.zip
@@ -72,7 +79,7 @@ jobs:
           - name: ios_sdk
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Select Xcode 26.0
         run: sudo xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer
       - name: Setup Git User
@@ -90,7 +97,7 @@ jobs:
           python3 run.py build ${{ matrix.platform.name }} --no-history
           python3 run.py package ${{ matrix.platform.name }}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: webrtc.${{ matrix.platform.name }}.tar.gz
           path: _package/${{ matrix.platform.name }}/webrtc.${{ matrix.platform.name }}.tar.gz
@@ -98,7 +105,7 @@ jobs:
       # ios のみ webrtc.${{ matrix.platform.name }}.tar.gz だけでなく、WebRTC.xcframework.zip もアップロードする
       - name: Upload Artifact for ios (WebRTC.xcframework.zip)
         if: matrix.platform.name == 'ios_sdk'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WebRTC.xcframework.zip
           path: _package/${{ matrix.platform.name }}/WebRTC.xcframework.zip
@@ -117,7 +124,7 @@ jobs:
             runs-on: ubuntu-24.04
     runs-on: ${{ matrix.platform.runs-on }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Disk Cleanup
         run: |
           set -x
@@ -164,7 +171,7 @@ jobs:
           python3 run.py build ${{ matrix.platform.name }} --no-history
           python3 run.py package ${{ matrix.platform.name }}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: webrtc.${{ matrix.platform.name }}.tar.gz
           path: _package/${{ matrix.platform.name }}/webrtc.${{ matrix.platform.name }}.tar.gz
@@ -177,7 +184,7 @@ jobs:
       - build-linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/download
         with:
           platform: windows_x86_64
@@ -208,7 +215,7 @@ jobs:
         run: |
           PACKAGE_NAME=WebRTC.xcframework.zip
           echo "$PACKAGE_NAME/$PACKAGE_NAME" >> package_paths.env
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: WebRTC.xcframework.zip
           path: WebRTC.xcframework.zip
@@ -219,6 +226,6 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
         id: env
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.env.outputs.package_paths }}
