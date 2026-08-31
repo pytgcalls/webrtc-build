@@ -29,6 +29,43 @@ VERSION ファイルを上げただけの場合は変更履歴記録は不要。
 
 ## タイムライン
 
+- 2026-07-31 [UPDATE] m152 ブランチのビルドエラーに対する対応
+  - ios_simulcast.patch を m152 の変更に対応する
+    - m152 で `rtc_media_base` ターゲットが削除されたため、ios_simulcast.patch で使用する deps を定義する
+    - 必要な deps は、`rtc_media_base` の deps に含まれていた以下のとおり
+      - `../api/video_codecs:scalability_mode`: `api/video_codecs/scalability_mode.h`
+      - `../api/video_codecs:video_codecs_api`: `api/video_codecs/video_codec.h` と `api/video_codecs/sdp_video_format.h`
+    - 参考: https://source.chromium.org/chromium/_/webrtc/src/+/91dbc17ae49f9fbf2071b5d60bf1b823973c4a4f
+  - windows_add_deps.patch のパッチのずれを修正する
+    - m152 で `stats` deps が削除されたため
+    - 参考: https://source.chromium.org/chromium/_/webrtc/src/+/cd7885ddf46e657672db275706a54b5da4c9db6b
+  - add_deps.patch のパッチのずれを修正する
+    - m152 で `pc:libjingle_peerconnection` deps が削除されたため
+  - @torikizi
+- 2026-07-17 [RELEASE] m150.7871.3.1
+  - @t-miya
+- 2026-07-16 [UPDATE] ARM 向け sysroot 生成を独自実装へ移行する
+  - multistrap への依存を削除する
+  - @voluntas
+- 2026-07-15 [ADD] Ubuntu 26.04 (armv8 / x86_64) ビルドを追加する
+  - @t-miya
+- 2026-07-02 [UPDATE] m151 ブランチのビルドエラーに対する対応
+  - 全ターゲットの PATCHES リストから `fix_moved_function_call.patch` を削除する
+    - m151 で libwebrtc 側でこのパッチが修正していた問題が解消されたため削除する
+    - 参考: WebRtcSessionDescriptionFactory の callback 呼び出しで use-after-move を修正したコミット
+      - https://webrtc-review.googlesource.com/c/src/+/478842
+  - `android` と `android_sdk` ターゲットの PATCHES リストから `android_rtp_receiver_get_streams.patch` をファイルごと削除する
+    - m151 で libwebrtc 側で対応されたため削除する
+  - Android パッチの offset 修正と Proxy Natives 移行に対応する
+    - android_audio_pause_resume.patch: 単純な offset 修正
+    - android_audio_track_sink.patch: BUILD.gn の構造変化対応、Proxy Natives パターンへの追従
+    - android_proxy.patch: Proxy Natives パターンへの追従、offset 修正
+  - `android_jni_zero_generated_java.patch` を追加
+    - jni_zero が生成する Java ソースを libwebrtc AAR に含めるためのパッチ
+  - `windows_add_deps.patch` の offset 修正と `rtc_base:socket_adapters` の削除
+    - m151 で upstream の BUILD.gn に既に含まれているため重複を削除
+  - `revive_proxy.patch` の offset 修正
+  - @torikizi
 - 2026-06-23 [RELEASE] m150.7871.3.0
   - @torikizi
 - 2026-06-17 [RELEASE] m150.7871.2.1
