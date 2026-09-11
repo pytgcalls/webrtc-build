@@ -1,8 +1,8 @@
 diff --git a/media/engine/webrtc_video_engine.cc b/media/engine/webrtc_video_engine.cc
-index 256a5aa..46d96b3 100644
+index 256a5aa..fb6853e 100644
 --- a/media/engine/webrtc_video_engine.cc
 +++ b/media/engine/webrtc_video_engine.cc
-@@ -3295,8 +3295,11 @@ void WebRtcVideoReceiveChannel::OnPacketReceived(RtpPacketReceived packet) {
+@@ -3295,8 +3295,12 @@ void WebRtcVideoReceiveChannel::OnPacketReceived(RtpPacketReceived packet) {
  
    call_->Receiver()->DeliverRtpPacket(
        MediaType::VIDEO, std::move(packet),
@@ -10,6 +10,7 @@ index 256a5aa..46d96b3 100644
 -          &WebRtcVideoReceiveChannel::MaybeCreateDefaultReceiveStream, this));
 +      [this, safety = task_safety_.flag()](
 +          const RtpPacketReceived& undemuxable_packet) {
++        RTC_DCHECK_RUN_ON(&thread_checker_);
 +        return safety->alive() &&
 +               MaybeCreateDefaultReceiveStream(undemuxable_packet);
 +      });
