@@ -191,7 +191,6 @@ PATCHES = {
         "windows_fix_adm_device_count.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "windows_arm64": [
@@ -205,7 +204,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "macos_arm64": [
@@ -222,7 +220,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ios": [
@@ -244,7 +241,6 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "ios_ssl_certificate_verifier_chain.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ios_sdk": [
@@ -265,10 +261,10 @@ PATCHES = {
         "revert_siso.patch",
         "ios_audio_track_sink.patch",
         "ios_audio_pause_resume.patch",
+        "ios_stereo_audio_output.patch",
         "unsafe_buffers_optout_list.patch",
         "ios_ssl_certificate_verifier_chain.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "android": [
@@ -291,7 +287,6 @@ PATCHES = {
         "turn_tls_client_certificate.patch",
         "android_turn_tls_client_certificate.patch",
         "android_jni_zero_generated_java.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "android_sdk": [
@@ -316,7 +311,6 @@ PATCHES = {
         "turn_tls_client_certificate.patch",
         "android_turn_tls_client_certificate.patch",
         "android_jni_zero_generated_java.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "raspberry-pi-os_armv8": [
@@ -328,7 +322,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-20.04_armv8": [
@@ -340,7 +333,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-22.04_armv8": [
@@ -352,7 +344,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-24.04_armv8": [
@@ -364,7 +355,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-26.04_armv8": [
@@ -376,7 +366,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-22.04_x86_64": [
@@ -388,7 +377,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-24.04_x86_64": [
@@ -400,7 +388,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-26.04_x86_64": [
@@ -412,7 +399,6 @@ PATCHES = {
         "remove_crel.patch",
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
-        "disable_pacer_keyframe_flush.patch",
         "receive_channel_undemuxable_safety.patch",
     ],
 }
