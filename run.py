@@ -192,6 +192,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "windows_arm64": [
         "4k.patch",
@@ -205,6 +206,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "macos_arm64": [
         "add_deps.patch",
@@ -221,6 +223,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ios": [
         "add_deps.patch",
@@ -242,6 +245,7 @@ PATCHES = {
         "ios_ssl_certificate_verifier_chain.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ios_sdk": [
         "add_deps.patch",
@@ -265,6 +269,7 @@ PATCHES = {
         "ios_ssl_certificate_verifier_chain.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "android": [
         "add_deps.patch",
@@ -287,6 +292,7 @@ PATCHES = {
         "android_turn_tls_client_certificate.patch",
         "android_jni_zero_generated_java.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "android_sdk": [
         "add_deps.patch",
@@ -311,6 +317,7 @@ PATCHES = {
         "android_turn_tls_client_certificate.patch",
         "android_jni_zero_generated_java.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "raspberry-pi-os_armv8": [
         "add_deps.patch",
@@ -322,6 +329,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-20.04_armv8": [
         "add_deps.patch",
@@ -333,6 +341,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-22.04_armv8": [
         "add_deps.patch",
@@ -344,6 +353,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-24.04_armv8": [
         "add_deps.patch",
@@ -355,6 +365,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-26.04_armv8": [
         "add_deps.patch",
@@ -366,6 +377,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-22.04_x86_64": [
         "add_deps.patch",
@@ -377,6 +389,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-24.04_x86_64": [
         "add_deps.patch",
@@ -388,6 +401,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
     "ubuntu-26.04_x86_64": [
         "add_deps.patch",
@@ -399,6 +413,7 @@ PATCHES = {
         "unsafe_buffers_optout_list.patch",
         "turn_tls_client_certificate.patch",
         "disable_pacer_keyframe_flush.patch",
+        "receive_channel_undemuxable_safety.patch",
     ],
 }
 
