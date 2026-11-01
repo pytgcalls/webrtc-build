@@ -22,6 +22,24 @@ Please read <https://github.com/shiguredo/oss/blob/master/README.en.md> before u
 
 [リリース](https://github.com/shiguredo-webrtc-build/webrtc-build/releases) からダウンロードしてください。
 
+## Android 向け AAR (JitPack)
+
+Android 向けの `libwebrtc.aar` は JitPack でも配布しています。
+
+`build.gradle` にリポジトリと依存を追加してください。
+
+```groovy
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'com.github.shiguredo-webrtc-build:webrtc-build:m155.8059.1.0'
+}
+```
+
+バージョンには webrtc-build のタグ名 (`m` 付き) を指定します。
+
 ## パッケージに入っている内容
 
 - WebRTC ライブラリ(webrtc.lib あるいは libwebrtc.a)
@@ -104,9 +122,9 @@ H.265 が利用可能なバイナリを配布する事は、ライセンスが�
 Apache License 2.0
 
 ```
-Copyright 2019-2025, Wandbox LLC (Original Author)
-Copyright 2019-2025, tnoho (Original Author)
-Copyright 2019-2025, Shiguredo Inc.
+Copyright 2019 Wandbox LLC (Original Author)
+Copyright 2019 tnoho (Original Author)
+Copyright 2019 Shiguredo Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

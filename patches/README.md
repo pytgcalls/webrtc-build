@@ -28,7 +28,9 @@ v4l2 で 4K に対応するパッチ。
 
 ## add_deps.patch
 
-zlib, log_sinks, サイマルキャストのエンコーダーアダプターを追加するパッチ。
+zlib, log_sinks, サイマルキャストのエンコーダーアダプター, フィールドトライアルを追加するパッチ。
+
+`api:field_trials` は Sora C++ SDK が `webrtc::FieldTrials::Create` でフィールドトライアル文字列を扱うために必要となる。
 
 ## android_fixsegv.patch
 
@@ -120,18 +122,39 @@ iOS でのマイク不使用時のパーミッション要求を抑制するパ�
 
 同等の機能が本家に実装されるか PR を出して取り込まれたら削除するが、デフォルトの仕様の破壊的変更を含むので難しいと思われる。
 
-以下に詳細を記載する。
-
-**注意:`923d1d4033cb14d893a01d313268f906e5d7568b` 以降 `RTCAudioSession+Configuration.mm` に追加していたログ出力を、 webrtc の変更に伴い削除**
-
 ### 内容
 
 - 接続時のマイクのパーミッション要求を抑制する。
 
 - マイクの初期化を明示的に行う API を追加する。
   パッチ適用後はマイクは自動的に初期化されない。
+  - `-[RTCAudioSession initializeInput:]`
+  - `-[RTCAudioSession setInitialMicrophoneMute:]`
+  - `-[RTCAudioSession setCategory:error:]` (NSString 版)
+  - `RTCAudioSessionErrorInputInitialization` エラー定数
 
 - `AVAudioSession` の初期化時に設定されるカテゴリを `AVAudioSessionCategoryPlayAndRecord` から `AVAudioSessionCategoryAmbient` に変更する。
+
+- `RTCAudioSession+Configuration.mm` で category 設定エラーを無視する。
+
+`initializeInput:` の入力初期化処理 (`AudioUnitInterface::InitializeInput` と `AudioDeviceIOS` の worker での実行) は `ios_stereo_audio_output.patch` が実装する。
+本パッチはその公開 API とカテゴリ設定を追加する。
+
+### `RTCAudioSession+Configuration.mm` のエラー判定について
+
+このパッチは `RTCAudioSessionConfiguration` の既定カテゴリを `AVAudioSessionCategoryAmbient` に変更しているが、 mode は `AVAudioSessionModeVoiceChat`、 categoryOptions は `AVAudioSessionCategoryOptionAllowBluetoothHFP` のまま残している。
+
+Apple のドキュメントでは `AllowBluetooth` は `record` / `playAndRecord` でのみ指定でき、カテゴリが対応していない option を指定すると `setCategory` はエラーになる。
+
+- <https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/allowbluetooth>
+- <https://developer.apple.com/documentation/avfaudio/avaudiosession/setcategory(_:options:)>
+
+recvonly のようにカテゴリを `playAndRecord` に変更しない場合、 `configureWebRTCSession` は無効な組み合わせで `setCategory` を呼び、エラーになる。
+パッチ末尾の `return YES` はこのエラーを無視して音声セッションの構成を継続するためのものである。
+`return error == nil` に戻すと `configureWebRTCSession` が NO を返し、 `AudioDeviceIOS::InitPlayOrRecord` が失敗して recvonly で再生できなくなる。
+
+この `return YES` を削除する場合は、 Ambient のときに有効な mode / categoryOptions へ変更するか、設定エラーを許容できるものと致命的なものに分類する対応が必要になる。
+なお、この変更はマイクの捕捉には影響しない。マイクの捕捉は `initializeInput` から呼ばれる入力 I/O の有効化で制御する。
 
 ### パッチ適用後の使い方
 
@@ -145,10 +168,8 @@ iOS でのマイク不使用時のパーミッション要求を抑制するパ�
 
 ### `RTCAudioSession` のロックについて
 
-パッチに変更を加える際は `RTCAudioSession` をロックするタイミングに注意すること。
-実行中に `RTCAudioSession` の設定を `configureWebRTCSession` などのメソッドで変更する場合はロックを行う必要がある。
-ロックは `lockForConfiguration` で行い、 `unlockForConfiguration` で解除する。
-たとえば `configureWebRTCSession` を適切にロックして実行するには、次のように前後を `lockForConfiguration` と `unlockForConfiguration` で囲む:
+`RTCAudioSession` の設定を変更するメソッド (`configureWebRTCSession` など) は、`lockForConfiguration` でロックしてから呼び出す必要がある。
+ロックせずに呼ぶと `kRTCAudioSessionErrorLockRequired` で失敗する。
 
 ```
 [session lockForConfiguration];
@@ -156,44 +177,12 @@ bool success = [session configureWebRTCSession:nil];
 [session unlockForConfiguration];
 ```
 
-`lockForConfiguration` はパッチ実装時は再帰的ロックで実装されていたが、現在は相互排他ロック (mutex) で実装されている。
-複数の箇所 (他のスレッド含む) でロックした場合、最初のロックが `unlockForConfiguration` で解除されるまで他の箇所の実行が止まるので注意すべき。
+`lockForConfiguration` は再入不可 (non-recursive) で、ロック中に同じスレッドから再度呼ぶと `RTC_CHECK` で落ちる。
+そのため、呼び出し元が既にロックを保持している場合は、内部でロックする `ConfigureAudioSession()` ではなく、ロック済み前提の `ConfigureAudioSessionLocked()` を使う。
+`AudioDeviceIOS::InitPlayOrRecord()` はロックを保持したまま `beginWebRTCSession` と `ConfigureAudioSessionLocked()` を呼び、`unlockForConfiguration` の後に `audio_unit_->Initialize()` を実行する。
 
-パッチで追加する `-[RTCAudioSession startVoiceProcessingAudioUnit:]` は `RTCAudioSession` の設定を変更するためにロックを行う。
-`startVoiceProcessingAudioUnit:` は `VoiceProcessingAudioUnit::Initialize()` (`sdk/objc/native/src/audio/voice_processing_audio_unit.mm`) から呼ばれる。
-`VoiceProcessingAudioUnit::Initialize()` は次の複数の箇所から呼ばれている:
-
-- `AudioDeviceIOS::InitPlayOrRecord()` (`sdk/objc/native/src/audio/audio_device_ios.mm`)
-- `AudioDeviceIOS::HandleSampleRateChange()` (`sdk/objc/native/src/audio/audio_device_ios.mm`)
-- `AudioDeviceIOS::UpdateAudioUnit()` (`sdk/objc/native/src/audio/audio_device_ios.mm`)
-
-`AudioDeviceIOS::InitPlayOrRecord()` はロックした状態で `VoiceProcessingAudioUnit::Initialize()` を呼んでいるが、 `AudioDeviceIOS::HandleSampleRateChange()` は呼び出し元をたどってもロックされていない (と思われる) 。
-
-また、 `AudioDeviceIOS::UpdateAudioUnit()` でもロックされていない。
-メソッド内で `ConfigureAudioSession()` を呼んでいるが、 `ConfigureAudioSession()` 内でロックしている (`-[RTCAudioSession configureWebRTCSession:]` を呼んでいる) ので、もしこの時点でロックされていればデッドロックするはず。
-したがって、この直後で呼ばれる `VoiceProcessingAudioUnit::Initialize()` はロックせずに呼ばれていることになる。
-
-もしその実装が正しいのであれば、 `VoiceProcessingAudioUnit::Initialize()` の呼び出しはロック不要であり、 `AudioDeviceIOS::InitPlayOrRecord()` で行うロックは意味がない。
-そこで、パッチでは `AudioDeviceIOS::InitPlayOrRecord()` 内で `VoiceProcessingAudioUnit::Initialize()` を呼ぶ前にロックを解除している。
-次に該当のパッチを示す:
-
-```
---- a/sdk/objc/native/src/audio/audio_device_ios.mm
-+++ b/sdk/objc/native/src/audio/audio_device_ios.mm
-@@ -913,8 +913,14 @@ bool AudioDeviceIOS::InitPlayOrRecord() {
-       audio_unit_.reset();
-       return false;
-     }
-+    // NOTE(enm10k): lockForConfiguration の実装が recursive lock から non-recursive lock に変更されたタイミングで、
-+    // この関数内の lock と、 audio_unit_->Initialize 内で実行される startVoiceProcessingAudioUnit が取得しようとするロックが競合するようになった
-+    // パッチ前の処理はロックの粒度を大きめに取っているが、以降の SetupAudioBuffersForActiveAudioSession や audio_unit_->Initialize は lock を必要としていないため、
-+    // ここで unlockForConfiguration するように修正する
-+    [session unlockForConfiguration];
-     SetupAudioBuffersForActiveAudioSession();
-     audio_unit_->Initialize(playout_parameters_.sample_rate());
-+    return true;
-   }
-```
+入力初期化は `AudioDeviceIOS` の worker で実行され、`RTCAudioSession` 側は `@synchronized(self)` で保護する。
+これは `lockForConfiguration` とは別のロックなので、両者を取り違えないこと。
 
 ## ios_proxy.patch
 
@@ -233,7 +222,9 @@ WebRTC は Let's Encrypt を含めていないので、Let's Encrypt の検証�
 
 ## windows_add_deps.patch
 
-オーディオデバイス, zlib, log_sinks, サイマルキャストのエンコーダーアダプターを追加するパッチ。
+オーディオデバイス, zlib, log_sinks, サイマルキャストのエンコーダーアダプター, フィールドトライアルを追加するパッチ。
+
+`api:field_trials` は Sora C++ SDK が `webrtc::FieldTrials::Create` でフィールドトライアル文字列を扱うために必要となる。
 
 ## windows_fix_audio_device.patch
 
@@ -322,7 +313,9 @@ Android SDK 向けに AudioTrackSink を提供し、AudioTrack ごとに PCM デ
 
 m151 で JNI コード生成が jni_zero に移行したことに伴い、`dist_jar("libwebrtc")` に FooJni.class の生成ターゲット（`generated_*_jni_java`）と jni_zero registration Java クラスを含めるためのパッチ。
 
-`dist_jar` のインライン deps を変数 `_libwebrtc_java_deps` に切り出すことで、`generate_jni_registration` ターゲットと deps を共有している。
+`dist_jar` のインライン deps を変数 `_libwebrtc_java_deps` に切り出すことで、`generate_final_jni` ターゲットと deps を共有している。
+
+`dist_jar` は `direct_deps_only = true` のため、直接依存に指定したターゲットの生成物しか集めない。`LoggingJni.class` は `../../rtc_base:base_java_jni_java` が `Logging.java` から生成するが、集約ターゲットである `../../rtc_base:base_java` 経由では `dist_jar` に届かない。このため `base_java_jni_java` を直接依存に加えている。この依存が無いと、`Logging.class` は `LoggingJni.get()` を呼ぶのに `LoggingJni.class` が AAR に含まれず、Sora Android SDK の `libjingleEnabled` 有効時に `NoClassDefFoundError` となる。
 
 併せて `third_party/jni_zero/BUILD.gn` の `generate_jni` ターゲットの visibility に `//sdk/android:*` を追加する。
 
@@ -412,3 +405,15 @@ libwebrtc 本体の `PeerConnectionInterface::IceServer::tls_client_identity` �
 `tls_client_identity` を生成する。
 
 `IceServer.toString()` には、秘密鍵や証明書 PEM は出力しない。
+
+## logging_sink_min_severity.patch
+
+`LoggingConfig::set_min_severity` で指定した閾値を `LoggingConfig::AddSink` で登録した sink への配信に反映させるパッチ。
+
+libwebrtc は config の sink への配信を `LogSink::min_severity_` で判定している。この値は `LogMessage::AddLogToStream` でしか設定できず、 `AddSink` に閾値の引数が無いため常に `LS_INFO` になる。このため `set_min_severity(LS_WARNING)` でも `LS_INFO` の行が届き、 `set_min_severity(LS_VERBOSE)` では `LS_VERBOSE` の行が届かない。下流では sink の handler 側で同じ条件を再実装して回避している。
+
+- `LogMessage::~LogMessage` の config の sink への配信判定を `config.min_severity()` に変える
+- `LogMessage::UpdateMinLogSeverity` から config の sink を外す。混ぜると `g_min_sev` が `LS_INFO` まで下がり、配信しない行まで構築してしまう
+- legacy な `AddLogToStream` と `GetLogToStream` の経路は変更しない。 `LogSink::min_severity_` は legacy 専用のメンバになる
+
+上流は `webrtc:42234107` (Remove LogSink from rtc::LogMessage) で `AddLogToStream` の削除を進めており、 config の sink の閾値は `min_severity` に従う方向である。上流でこの移行が完了したら、このパッチは削除する。

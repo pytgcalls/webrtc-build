@@ -2,11 +2,19 @@ name: build
 on:
   push:
     paths-ignore:
-      - "**.md"
+      # ルート直下とサブディレクトリの Markdown を分ける
+      #
+      # GitHub Actions の glob では `**.md` はルートの `CHANGES.md` 等に
+      # マッチしない。`*.md` と `**/*.md` の両方が必要。
+      - "*.md"
+      - "**/*.md"
       - "LICENSE"
       - "NOTICE"
       - ".gitignore"
       - "scripts/version_update.sh"
+      # issue の起票・更新では `issues/SEQUENCE` のような Markdown 以外の
+      # ファイルも変更されるため、issues 配下全体をビルド対象から除外する
+      - "issues/**"
       - "run.py"
     tags:
       - "*"
@@ -17,7 +25,9 @@ jobs:
       matrix:
         platform:
           - name: windows_x86_64
+            rust-target: x86_64-pc-windows-msvc
           - name: windows_arm64
+            rust-target: aarch64-pc-windows-msvc
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +67,27 @@ jobs:
         run: |
           git config --global user.name  "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+      # Windows SDK 10.0.28000.0 をインストールする
+      #
+      # このステップを追加した背景
+      #
+      # m153 で chromium build の SDK_VERSION が 10.0.28000.0 に更新されたが、
+      # GitHub Actions の windows runner (windows-2022) には 10.0.28000.0 が
+      # インストールされておらず、setup_toolchain.py が include 環境変数内の
+      # 10.0.28000.0 のパスが存在しないエラーを出して gn gen が失敗した。
+      # そのため scripts/install_windows_sdk.ps1 を新規作成して、Build ステップの
+      # 前に SDK を明示的にインストールする (Linux の scripts/apt_install_*.sh を
+      # build.yml から呼ぶ構成と同様の方式)。
+      #
+      # このステップを外す条件
+      #
+      # GitHub Actions の windows runner (例: windows-2022 の更新や新しい runner
+      # イメージ) に Windows SDK 10.0.28000.0 が標準でインストールされるように
+      # なった場合は、このステップごと削除してよい。
+      # なお SDK_VERSION が再び別のバージョンへ更新された場合は、
+      # install_windows_sdk.ps1 側の $sdkVersion と合わせて見直すこと。
+      - name: Install Windows SDK
+        run: scripts/install_windows_sdk.ps1
       - name: Build ${{ matrix.platform.name }}
         run: |
           # リポジトリの下に置きたいが、GitHub Actions の D:\ の容量が少なくてビルド出来ない問題があるので
@@ -64,6 +95,16 @@ jobs:
           # また、WebRTC のビルドしたファイルは同じドライブに無いといけないっぽいのでこちらも設定する。
           python3 run.py build ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build' --no-history
           python3 run.py package ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build'
+      - name: Test link ${{ matrix.platform.name }}
+        run: |
+          python3 run.py test-link ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build'
+      - name: Setup Rust ${{ matrix.platform.name }}
+        run: |
+          # Rust のバージョンは rust-toolchain.toml で固定している
+          rustup target add ${{ matrix.platform.rust-target }}
+      - name: Test link (Rust) ${{ matrix.platform.name }}
+        run: |
+          python3 run.py test-link-rust ${{ matrix.platform.name }} --source-dir 'C:\webrtc' --build-dir 'C:\webrtc-build'
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
@@ -75,7 +116,9 @@ jobs:
       matrix:
         platform:
           - name: macos_arm64
+            rust-target: aarch64-apple-darwin
           - name: ios
+            rust-target: aarch64-apple-ios
           - name: ios_sdk
     runs-on: macos-26
     steps:
@@ -96,6 +139,19 @@ jobs:
         run: |
           python3 run.py build ${{ matrix.platform.name }} --no-history
           python3 run.py package ${{ matrix.platform.name }}
+      - name: Test link ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'ios_sdk'
+        run: |
+          python3 run.py test-link ${{ matrix.platform.name }}
+      - name: Setup Rust ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'ios_sdk'
+        run: |
+          # Rust のバージョンは rust-toolchain.toml で固定している
+          rustup target add ${{ matrix.platform.rust-target }}
+      - name: Test link (Rust) ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'ios_sdk'
+        run: |
+          python3 run.py test-link-rust ${{ matrix.platform.name }}
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
@@ -115,10 +171,13 @@ jobs:
       matrix:
         platform:
           - name: ubuntu-22.04_armv8
+            rust-target: aarch64-unknown-linux-gnu
             runs-on: ubuntu-24.04
           - name: ubuntu-22.04_x86_64
+            rust-target: x86_64-unknown-linux-gnu
             runs-on: ubuntu-22.04
           - name: android
+            rust-target: aarch64-linux-android
             runs-on: ubuntu-24.04
           - name: android_sdk
             runs-on: ubuntu-24.04
@@ -170,6 +229,19 @@ jobs:
         run: |
           python3 run.py build ${{ matrix.platform.name }} --no-history
           python3 run.py package ${{ matrix.platform.name }}
+      - name: Test link ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'android_sdk'
+        run: |
+          python3 run.py test-link ${{ matrix.platform.name }}
+      - name: Setup Rust ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'android_sdk'
+        run: |
+          # Rust のバージョンは rust-toolchain.toml で固定している
+          rustup target add ${{ matrix.platform.rust-target }}
+      - name: Test link (Rust) ${{ matrix.platform.name }}
+        if: matrix.platform.name != 'android_sdk'
+        run: |
+          python3 run.py test-link-rust ${{ matrix.platform.name }}
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
@@ -209,6 +281,19 @@ jobs:
       - uses: ./.github/actions/download
         with:
           platform: android_sdk
+      # Release の成果物に AAR 単体を追加する
+      #
+      # android_sdk のアーカイブから取り出し、 libwebrtc.aar として Release に
+      # アップロードする。JitPack は libwebrtc.aar を取得する。ライセンス通知
+      # (NOTICE) は AAR に同梱済みで、アーカイブ側にも含まれている。
+      - name: Extract libwebrtc.aar
+        shell: bash
+        run: |
+          mkdir -p android_sdk
+          tar -xzf webrtc.android_sdk.tar.gz/webrtc.android_sdk.tar.gz -C android_sdk
+          mkdir -p release_assets/aar
+          cp android_sdk/webrtc/aar/libwebrtc.aar release_assets/aar/libwebrtc.aar
+          echo "release_assets/aar/libwebrtc.aar" >> package_paths.env
       # Sora iOS SDK 向けバイナリの WebRTC.xcframework.zip をダウンロードする
       - name: Env to output for WebRTC.xcframework.zip
         shell: bash
@@ -225,7 +310,28 @@ jobs:
           cat package_paths.env >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         id: env
+      # draft として作成し、全成果物のアップロード後に publish する
+      #
+      # JitPack が成果物のアップロード途中の Release を検知してビルドを始めるのを防ぐ
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
+          draft: true
           files: ${{ steps.env.outputs.package_paths }}
+      - name: Publish Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release edit "${GITHUB_REF_NAME}" --draft=false
+      # JitPack のビルドを起動し、 artifact の公開を確認する
+      #
+      # JitPack は未ビルドのバージョンの artifact をリクエストするとビルドする
+      # build.log へのリクエストでビルドを起動し、 POM の取得で公開を確認する
+      - name: Publish libwebrtc.aar to JitPack
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          BASE_URL="https://jitpack.io/com/github/shiguredo-webrtc-build/webrtc-build/${VERSION}"
+          curl -fsSL -m 1800 -o /dev/null "${BASE_URL}/build.log"
+          curl -fsSL -o /dev/null "${BASE_URL}/webrtc-build-${VERSION}.pom"

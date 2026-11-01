@@ -31,10 +31,125 @@ VERSION ファイルを上げただけの場合は変更履歴記録は不要。
 
 ## タイムライン
 
-- 2026-09-09 [RELEASE] m152.7977.0.3
+- 2026-10-14 [RELEASE] m157.8103.0.0
+  - @melpon
+- 2026-10-14 [RELEASE] m156.8078.3.5
+  - @melpon
+- 2026-10-12 [CHANGE] [m156] Windows のビルドを upstream と同じ clang + libc++ に揃える
+  - Windows だけ `use_custom_libcxx=false` を指定して MSVC の標準ライブラリに合わせていたのをやめ、upstream の既定どおり clang + libc++ でビルドする。この指定は upstream が非推奨としており、いずれ削除される
+  - Windows の libc++ は GN の source_set で `libc++.a` が作られないため、GN がビルドしたオブジェクトを配布する `webrtc.lib` に入れる。libc++abi は Windows では使わない (Microsoft ABI を使うため) ので入れない
+  - Rust の rlib を取り込む `llvm-ar` と `llvm-objcopy` は、Visual Studio 同梱の LLVM から拾うのをやめ、LLVM の公式リリースの Windows 向けアーカイブからダウンロードして使う。sha256 を検証し、取り出し済みならダウンロードも展開もしない
+  - `run.py test-link` と `test-link-rust` の Windows は、配布物と同じ clang-cl と lld-link でコンパイルとリンクを行う。MSVC の cl.exe と link.exe を使わなくなり、MSVC 向けにフラグを翻訳していた `MSVC_COMPILE_FLAGS` も不要になった
+  - 配布する `webrtc.lib` をリンクする下流 (sora-cpp-sdk や webrtc-rs) も clang + libc++ へ移行する必要がある
+  - @melpon
+- 2026-10-11 [RELEASE] m156.8078.3.4
+  - @melpon
+- 2026-10-11 [FIX] [m156] LoggingConfig で登録した sink の配信閾値を min_severity に従わせる
+  - `AddSink` には閾値の引数が無く `LogSink` の閾値が `LS_INFO` のままになるため、 `set_min_severity(LS_WARNING)` でも `LS_INFO` の行が届き、 `set_min_severity(LS_VERBOSE)` では `LS_VERBOSE` の行が届かなかった
+  - config の sink への配信判定を `LoggingConfig::min_severity()` に変え、 `UpdateMinLogSeverity` の閾値の計算から config の sink を外す。閾値を計算に混ぜると `g_min_sev` が `LS_INFO` まで下がり、配信しない行まで構築してしまう
+  - @melpon
+- 2026-10-11 [RELEASE] m156.8078.3.3
+  - @melpon
+- 2026-10-10 [FIX] [m156] libwebrtc.a に ObjC の実装を含める
+  - Apple の ObjC の実装 (sdk/objc) は GN の完全な静的ライブラリに入らず WebRTC.framework のリンクにだけ渡るため、フレームワークのリンク入力もアーカイブに入れる。これが無いと ObjCToNativeVideoEncoderFactory や RTCDefaultVideoEncoderFactory を呼ぶ webrtc-rs が未定義シンボルで失敗する
+  - ObjC の実装がアーカイブに入っていることを確認する tests/link_test_objc.mm を追加し、既定のコーデックファクトリと ObjCToNative* の変換関数を実際に呼び出す
+  - Windows で ninja に渡すターゲット名に GN の表示用の絶対パスを渡していたためビルドに失敗していた。ターゲットが作るファイルのパスは gn outputs から引くようにする
+  - @melpon
+- 2026-10-10 [RELEASE] m156.8078.3.2
+  - @melpon
+- 2026-10-08 [FIX] [m156] libwebrtc.a と webrtc.lib に Rust の実装を含める
+  - m156 で libwebrtc 本体が Rust 実装 (corruption detection) を呼ぶようになったが、配布するアーカイブには Rust のオブジェクトが入らず、リンクが未定義シンボルで失敗していた
+  - GN が作る完全な静的ライブラリを土台にし、GN がリンク時に渡す静的ライブラリ (libc++ など) と alink の入力として宣言している rlib の中身を足す方式に変更する。ホストツール (nasm や protobuf) が入らなくなるため libwebrtc.a は 20 MB ほど小さくなり、--whole-archive でのリンクも可能になる
+  - Rust の std が定義する rust_eh_personality は利用者の Rust の std とも重複するため、アーカイブの中では webrtc_rust_eh_personality に改名してリンカオプションを足さずにリンクできるようにする
+  - Windows は lld-link /lib で合体し、MSVC でリンクする下流のために compiler-rt の builtins も同梱する
+  - 配布するアーカイブの関数を呼び出す tests/link_test.cc を追加し、run.py test-link がコンパイルとリンクを行って実行する。Windows 以外は GN と同じ Clang のフラグを使い、Windows はアーカイブの利用者 (sora-cpp-sdk や webrtc-rs) と同じ MSVC を使う。CI の各プラットフォームでも確認する
+  - @melpon
+- 2026-10-08 [RELEASE] m156.8078.3.1
+  - @zztkm
+- 2026-10-07 [FIX] [m156] android_jni_zero_generated_java.patch に base_java_jni_java の依存を追加する
+  - この依存が無いと LoggingJni.class が AAR の classes.jar に含まれず、Sora Android SDK の libjingleEnabled 有効時に NoClassDefFoundError になる
+  - dist_jar は direct_deps_only = true のため、集約ターゲットである base_java 経由では LoggingJni.class が届かない
+  - @zztkm
+- 2026-10-05 [RELEASE] m156.8078.2.1
+  - @voluntas
+- 2026-10-05 [ADD] [m154] android ターゲットにも android_audio_pause_resume.patch と android_audio_track_sink.patch を適用する
+  - Sora Android SDK 向けにだけ適用していたパッチを android にも揃え、Rust 側が同梱する jar と static library でも pauseRecording / resumeRecording と AudioTrackSink を利用できるようにする
+  - @voluntas
+- 2026-10-01 [RELEASE] m156.8078.1.1
+  - @zztkm
+- 2026-10-01 [RELEASE] m156.8078.1.0
+  - @zztkm
+- 2026-10-01 [RELEASE] m155.8059.2.0
+  - @zztkm
+- 2026-10-01 [RELEASE] m154.8037.3.0
+  - @zztkm
+- 2026-09-30 [RELEASE] m156.8078.0.0
+  - @voluntas
+- 2026-09-30 [UPDATE] [m156] add_license_sframe.patch を削除する
+  - m156 で generate_licenses.py に sframe のライセンスエントリが追加されたため不要になる
+  - @voluntas
+- 2026-09-30 [FIX] [m156] ios_simulcast.patch と android_simulcast.patch の hunk を修正する
+  - sdk/BUILD.gn と sdk/android/BUILD.gn の m156 の変更に合わせる
+  - @voluntas
+- 2026-09-30 [FIX] [m156] ios_audio_pause_resume.patch の runOnWorker を修正する
+  - m156 で専用 worker thread が廃止されたため workerThread プロパティ経由の実行に変更する
+  - @voluntas
+- 2026-09-30 [FIX] [m156] android_proxy.patch と android_audio_track_sink.patch のパッチ適用エラーを修正する
+  - android_proxy.patch を PeerConnectionFactory.java の lifecycleLock 導入に合わせる
+  - android_proxy.patch の JNI ブリッジを worker thread を分離しない変更に合わせる
+  - android_audio_track_sink.patch を AudioTrack.java のコメント整形に合わせる
+  - @voluntas
+- 2026-09-30 [RELEASE] m151.7922.0.1
+  - @zztkm
+- 2026-09-28 [FIX] [m151] android_proxy.patch の ConnectionContext の破棄順が原因で PeerConnectionFactory 破棄時にクラッシュする不具合を修正する
+  - `ConnectionContext` のデストラクタは media engine を worker thread で破棄するため、 `worker_thread_->BlockingCall` または `worker_thread_->PostTask` を呼ぶ
+  - `context_` が worker / network / signaling thread より後に破棄されると、 破棄済みの worker thread を呼び出して use-after-free になっていた
+  - `context_` の宣言位置を変更し、 worker / network / signaling thread より先に破棄されるようにする
+  - @zztkm
+- 2026-09-28 [RELEASE] m155.8059.1.1
+  - @voluntas
+- 2026-09-25 [ADD] [m155] JitPack で Android 向け AAR を配布する
+  - jitpack.yml と scripts/prepare_aar.sh を追加し、 Release の libwebrtc.aar を JitPack に公開する
+  - Release の成果物に libwebrtc.aar を追加し、 draft として作成して全成果物のアップロード後に publish する
+  - libwebrtc.aar に META-INF/NOTICE としてライセンス通知を同梱する
+  - publish 後に JitPack のビルドを起動し、 artifact の公開を確認する
+  - @voluntas
+- 2026-09-23 [UPDATE] libwebrtc の Rust ビルドを有効化する
+  - run.py の COMMON_GN_ARGS から Rust を無効化する 4 つの指定を削除する
+  - enable_rust / enable_rust_cxx / enable_chromium_prelude と rtc_rust は upstream の既定値が true のため、指定を削除するだけで有効になる
+  - @melpon
+- 2026-09-19 [RELEASE] m155.8059.1.0
+  - @voluntas
+- 2026-09-18 [RELEASE] m155.8059.0.0
+  - @voluntas
+- 2026-09-17 [FIX] [m155] h265.patch のパッチ適用エラーを修正する
+  - pic_width_in_mbs_minus1 と pic_height_in_map_units_minus1 の保存箇所を m155 の構造に合わせる
+  - @voluntas
+- 2026-09-17 [ADD] add_deps.patch と windows_add_deps.patch で api:field_trials を追加する
+  - Sora C++ SDK が webrtc::FieldTrials::Create でフィールドトライアル文字列を扱えるようにする
+  - @melpon
+- 2026-09-11 [UPDATE] iOS の stereo 設定を ADM の init に渡す
+  - RTCAudioDeviceModule の setStereoPlayoutEnabled / stereoPlayoutEnabled を削除し、init の引数にする
+  - AudioDeviceModuleIOS の stereo_playout_enabled_on_init_ を構築時設定にする
+  - @melpon
+- 2026-09-10 [UPDATE] iOS の録音 pause/resume を factory の worker 実行に移す
+  - RTCPeerConnectionFactory に runOnWorker を追加し、RTCAudioDeviceModule の bindToFactory を削除する
+  - pauseRecording / resumeRecording は worker 上で呼ぶ契約にする
+  - @melpon
+- 2026-09-10 [UPDATE] iOS の入力初期化を AudioUnit 生成前の 1 回に限定する
+  - 生成後の要求に対応する世代管理 (generation / owner / safety flag / PostTask) を削除する
+  - 入力要求は AudioUnit の初期化時点で適用し、停止・破棄時は保留要求を失敗させる
+  - @melpon
+- 2026-09-10 [ADD] ios にも ios_stereo_audio_output.patch を適用する
+  - stereo を ios / ios_sdk の共通パッチとし、ios_manual_audio_input.patch より先に適用する
+  - ios_manual_audio_input.patch は公開 API 宣言と既定 category のみを追加する形へ縮小し、入力初期化の実装は ios_stereo_audio_output.patch に集約する
+  - @melpon
+- 2026-09-09 [RELEASE] m154.8037.1.1
   - @voluntas
 - 2026-09-09 [UPDATE] disable_pacer_keyframe_flush.patch を削除する
   - キーフレーム到着時の pacer の flush は libwebrtc の仕様どおりの挙動であるため、強制無効化をやめる
+  - @voluntas
+- 2026-09-09 [RELEASE] m154.8037.1.0
   - @voluntas
 - 2026-09-08 [RELEASE] m150.7871.3.5
   - @voluntas
@@ -61,10 +176,27 @@ VERSION ファイルを上げただけの場合は変更履歴記録は不要。
   - `RTCAudioDeviceModule` に `setStereoPlayoutEnabled:` / `stereoPlayoutEnabled` を追加
   - ステレオ有効時のみ `RemoteIO` へ切り替え、ハードウェア AEC / AGC が失われる制約は md に明記
   - @voluntas
+- 2026-09-02 [RELEASE] m154.8037.0.0
+  - @voluntas
+- 2026-09-02 [UPDATE] m154 ブランチのパッチのずれを修正する
+  - unsafe_buffers_optout_list.patch の hunk 行番号を m154 upstream の unsafe_buffers_paths.txt に合わせる
+  - @voluntas
+- 2026-09-02 [RELEASE] m153.8010.0.0
+  - @voluntas
 - 2026-09-02 [RELEASE] m152.7977.0.2
   - @voluntas
 - 2026-09-02 [RELEASE] m152.7977.0.1
   - @voluntas
+- 2026-09-02 [UPDATE] m153 ブランチのビルドエラーに対する対応
+  - add_license_sframe.patch を追加する
+    - m153 で sframe がビルド対象に加わり、generate_licenses.py のライセンスエントリが無くパッケージングに失敗するため
+    - 全ターゲットの PATCHES リストに登録する
+  - android_jni_zero_generated_java.patch の generate_jni_registration を generate_final_jni に置き換える
+    - jni_zero のテンプレート名が変更されたため
+  - install_windows_sdk.ps1 を追加し、build.yml の build-windows ジョブから呼び出す
+    - m153 で Windows SDK 10.0.28000.0 が必要になるが、runner にインストールされていないため
+    - インストーラーは Microsoft 公式のダウンロードリンク (fwlink) から取得する
+  - @torikizi
 - 2026-09-01 [ADD] disable_pacer_keyframe_flush.patch を追加する
   - キーフレーム到着時の pacer キュー flush を削除して強制無効化する
   - 送信途中の RTP フレームが切断される問題を回避する
