@@ -1,0 +1,26 @@
+diff --git a/net/dcsctp/socket/dcsctp_socket.cc b/net/dcsctp/socket/dcsctp_socket.cc
+index fa3d63f..b8360d2 100644
+--- a/net/dcsctp/socket/dcsctp_socket.cc
++++ b/net/dcsctp/socket/dcsctp_socket.cc
+@@ -193,13 +193,19 @@ DcSctpSocket::DcSctpSocket(absl::string_view log_prefix,
+           absl::bind_front(&DcSctpSocket::OnInitTimerExpiry, this),
+           TimerOptions(options.t1_init_timeout.ToTimeDelta(),
+                        TimerBackoffAlgorithm::kExponential,
+-                       options.max_init_retransmits))),
++                       options.max_init_retransmits,
++                       options.max_timer_backoff_duration.has_value()
++                           ? options.max_timer_backoff_duration->ToTimeDelta()
++                           : TimeDelta::PlusInfinity()))),
+       t1_cookie_(timer_manager_.CreateTimer(
+           "t1-cookie",
+           absl::bind_front(&DcSctpSocket::OnCookieTimerExpiry, this),
+           TimerOptions(options.t1_cookie_timeout.ToTimeDelta(),
+                        TimerBackoffAlgorithm::kExponential,
+-                       options.max_init_retransmits))),
++                       options.max_init_retransmits,
++                       options.max_timer_backoff_duration.has_value()
++                           ? options.max_timer_backoff_duration->ToTimeDelta()
++                           : TimeDelta::PlusInfinity()))),
+       t2_shutdown_(timer_manager_.CreateTimer(
+           "t2-shutdown",
+           absl::bind_front(&DcSctpSocket::OnShutdownTimerExpiry, this),
