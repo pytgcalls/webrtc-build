@@ -1435,10 +1435,15 @@ def get_test_link_work_dirs(target: str, webrtc_build_dir: str) -> List[Tuple[st
 def get_rust_target_triple(target: str, arch: str) -> str:
     # ターゲットと arch に対応する Rust の target triple を返す
     if target == "android":
-        # ANDROID_ARCHS は arm64-v8a だけ
-        if arch != "arm64-v8a":
+        triples = {
+            "armeabi-v7a": "armv7-linux-androideabi",
+            "arm64-v8a": "aarch64-linux-android",
+            "x86": "i686-linux-android",
+            "x86_64": "x86_64-linux-android",
+        }
+        if arch not in triples:
             raise Exception(f"unknown Rust target for {target} {arch}")
-        return "aarch64-linux-android"
+        return triples[arch]
     if target == "ios":
         # IOS_ARCHS は device:arm64 だけ
         if arch != "arm64":
