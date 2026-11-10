@@ -1,0 +1,37 @@
+{
+    "name": "muslinux_armv8",
+    "format": "apk",
+    "arch": "aarch64",
+    "triplet": "aarch64-alpine-linux-musl",
+    "tools_signed_by": "keyrings/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+    "packages": [
+        "musl-dev",
+        "linux-headers",
+        "libgcc",
+        "gcc",
+        "alsa-lib-dev",
+        "pulseaudio-dev",
+        "libx11-dev",
+        "libxext-dev",
+        "libxfixes-dev",
+        "libxdamage-dev",
+        "libxcomposite-dev",
+        "libxrandr-dev",
+        "libxtst-dev",
+        "glib-dev",
+        "pipewire-dev",
+        "mesa-dev",
+        "libdrm-dev"
+    ],
+    "repositories": [
+        {
+            "url": "https://dl-cdn.alpinelinux.org/alpine",
+            "suite": "v3.22",
+            "components": [
+                "main",
+                "community"
+            ],
+            "signed_by": "keyrings/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        }
+    ]
+}

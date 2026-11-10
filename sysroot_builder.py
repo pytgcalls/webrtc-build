@@ -17,11 +17,13 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import re
 import shlex
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -49,7 +51,13 @@ MANIFEST_VERSION = 2
 # 設定値のうち APT の設定ファイルやコマンドラインへ埋め込むものに許可する文字。
 # sources.list の [] オプションや空白による区切りを壊す文字を弾き、
 # 設定ファイル経由のインジェクションを構文レベルで防ぐ。
-CONFIG_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._+:/-]+$")
+CONFIG_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._+:/@-]+$")
+
+# 対応するパッケージの形式
+PACKAGE_FORMATS = ("deb", "apk")
+
+# apk 形式の sysroot の生成に使う apk-tools の静的リンク版のパッケージ名
+APK_TOOLS_STATIC_PACKAGE = "apk-tools-static"
 
 
 class SysrootConfigError(ValueError):
@@ -86,6 +94,11 @@ class SysrootConfig:
     triplet: str
     packages: tuple[str, ...]
     repositories: tuple[RepositoryConfig, ...]
+    # パッケージの形式。"deb" は APT、"apk" は Alpine Linux (musl) の apk を使う。
+    package_format: str = "deb"
+    # apk.static の署名を検証する鍵。apk.static はホストで実行するため、
+    # 対象と異なるアーキテクチャの sysroot ではホストのアーキテクチャの鍵が要る。
+    tools_signed_by: Path | None = None
 
 
 # 以下の _require_* は JSON から読んだ値の検証ヘルパー。
@@ -122,6 +135,20 @@ def _require_string_array(value: object, label: str) -> tuple[str, ...]:
     return result
 
 
+def _resolve_key_path(value: object, config_dir: Path, label: str) -> Path:
+    path = Path(_require_string(value, label))
+    if not path.is_absolute():
+        path = config_dir / path
+    path = path.resolve()
+    if not path.is_file():
+        raise SysrootConfigError(f"{label} does not exist: {path}")
+    # 解決後の絶対パスも sources.list の signed-by= オプションへ埋め込むため、
+    # checkout の置き場所に構文を壊す文字が含まれていないかまで確認する。
+    if CONFIG_TOKEN_PATTERN.fullmatch(str(path)) is None:
+        raise SysrootConfigError(f"{label} contains unsupported characters: {path}")
+    return path
+
+
 def _load_repository(value: object, config_dir: Path, index: int) -> RepositoryConfig:
     label = f"repositories[{index}]"
     raw = _require_object(value, label)
@@ -142,17 +169,7 @@ def _load_repository(value: object, config_dir: Path, index: int) -> RepositoryC
     )
     # 署名鍵の相対パスは設定ファイルの配置場所を基準に解決し、
     # 実行時のカレントディレクトリに依存させない。
-    signed_by_value = _require_string(raw.get("signed_by"), f"{label}.signed_by")
-    signed_by = Path(signed_by_value)
-    if not signed_by.is_absolute():
-        signed_by = config_dir / signed_by
-    signed_by = signed_by.resolve()
-    if not signed_by.is_file():
-        raise SysrootConfigError(f"{label}.signed_by does not exist: {signed_by}")
-    # 解決後の絶対パスも sources.list の signed-by= オプションへ埋め込むため、
-    # checkout の置き場所に構文を壊す文字が含まれていないかまで確認する。
-    if CONFIG_TOKEN_PATTERN.fullmatch(str(signed_by)) is None:
-        raise SysrootConfigError(f"{label}.signed_by contains unsupported characters: {signed_by}")
+    signed_by = _resolve_key_path(raw.get("signed_by"), config_dir, f"{label}.signed_by")
 
     return RepositoryConfig(
         url=url,
@@ -173,6 +190,12 @@ def load_sysroot_config(path: Path) -> SysrootConfig:
     name = _require_token(raw.get("name"), "name")
     arch = _require_token(raw.get("arch"), "arch")
     triplet = _require_token(raw.get("triplet"), "triplet")
+    package_format = _require_token(raw.get("format", "deb"), "format")
+    if package_format not in PACKAGE_FORMATS:
+        raise SysrootConfigError(f"format must be one of {PACKAGE_FORMATS}: {package_format}")
+    tools_signed_by = None
+    if raw.get("tools_signed_by") is not None:
+        tools_signed_by = _resolve_key_path(raw.get("tools_signed_by"), path.parent, "tools_signed_by")
     packages = tuple(
         _require_token(package, "packages[]")
         for package in _require_string_array(raw.get("packages"), "packages")
@@ -192,6 +215,8 @@ def load_sysroot_config(path: Path) -> SysrootConfig:
         triplet=triplet,
         packages=packages,
         repositories=repositories,
+        package_format=package_format,
+        tools_signed_by=tools_signed_by,
     )
 
 
@@ -211,7 +236,7 @@ def sysroot_config_fingerprint(config: SysrootConfig) -> str:
     ファイル内容のハッシュで表現し、checkout の場所が違っても
     同一内容なら同じ fingerprint になるようにする。
     """
-    payload = {
+    payload: dict[str, object] = {
         "name": config.name,
         "arch": config.arch,
         "triplet": config.triplet,
@@ -226,6 +251,11 @@ def sysroot_config_fingerprint(config: SysrootConfig) -> str:
             for repository in config.repositories
         ],
     }
+    # deb 形式の fingerprint を変えないよう、形式は deb 以外のときだけ含める。
+    if config.package_format != "deb":
+        payload["format"] = config.package_format
+    if config.tools_signed_by is not None:
+        payload["tools_signed_by_sha256"] = _file_sha256(config.tools_signed_by)
     # キー順序と区切り文字を固定した正規化 JSON をハッシュ対象にする。
     encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -311,6 +341,151 @@ def _write_apt_files(config: SysrootConfig, work_dir: Path) -> None:
     (work_dir / "sources.list").write_text("\n".join(source_lines) + "\n", encoding="utf-8")
 
 
+def _install_deb_packages(config: SysrootConfig, work_dir: Path, new_root: Path) -> list[str]:
+    apt_get = _require_command("apt-get")
+    dpkg_deb = _require_command("dpkg-deb")
+    _write_apt_files(config, work_dir)
+
+    environment = os.environ.copy()
+    environment["APT_CONFIG"] = str(work_dir / "apt.conf")
+    apt_options = _apt_options(work_dir)
+    _run_command([apt_get, *apt_options, "update"], environment=environment)
+    # --download-only により、依存解決とダウンロードだけを apt-get に任せる。
+    # インストール（＝maintainer script の実行）はしないので root 権限が要らない。
+    _run_command(
+        [
+            apt_get,
+            *apt_options,
+            "--download-only",
+            "--yes",
+            "--no-install-recommends",
+            "--no-install-suggests",
+            "install",
+            *config.packages,
+        ],
+        environment=environment,
+    )
+
+    # ダウンロード済みの deb をすべて sysroot へ展開する。
+    # dpkg-deb --extract はファイルを取り出すだけで maintainer script を実行しない。
+    archive_dir = work_dir / "state" / "cache" / "archives"
+    deb_files = sorted(archive_dir.glob("*.deb"))
+    if not deb_files:
+        raise SysrootBuildError(f"No deb packages were downloaded for: {config.name}")
+    logging.info("Extracting %d packages", len(deb_files))
+    for deb_file in deb_files:
+        _run_command([dpkg_deb, "--extract", str(deb_file), str(new_root)], log_command=False)
+    return [deb_file.name for deb_file in deb_files]
+
+
+def _download(url: str, destination: Path) -> None:
+    logging.info("Downloading %s", url)
+    with urllib.request.urlopen(url) as response, destination.open("wb") as file:
+        shutil.copyfileobj(response, file)
+
+
+def _read_apkindex_version(index_path: Path, package: str, work_dir: Path) -> str:
+    # APKINDEX の P: (パッケージ名) と V: (バージョン) からバージョンを引く。
+    # ここで得たバージョンは apk.static の取得にだけ使い、apk.static 自体は署名で検証する。
+    extract_dir = work_dir / "apkindex"
+    extract_dir.mkdir()
+    _run_command(
+        [_require_command("tar"), "-xzf", str(index_path), "-C", str(extract_dir), "APKINDEX"]
+    )
+    current = None
+    for line in (extract_dir / "APKINDEX").read_text(encoding="utf-8").splitlines():
+        if line.startswith("P:"):
+            current = line[2:]
+        elif line.startswith("V:") and current == package:
+            return line[2:]
+    raise SysrootBuildError(f"Package was not found in APKINDEX: {package}")
+
+
+def _prepare_apk_static(config: SysrootConfig, work_dir: Path, keys_dir: Path) -> Path:
+    # apk.static はホストで実行するので、ホストのアーキテクチャのものを取得する。
+    # 実行する前に、パッケージに入っている署名をリポジトリの鍵で検証する。
+    host_arch = platform.machine()
+    repository = config.repositories[0]
+    base_url = f"{repository.url}/{repository.suite}/{repository.components[0]}/{host_arch}"
+    index_path = work_dir / "APKINDEX.tar.gz"
+    _download(f"{base_url}/APKINDEX.tar.gz", index_path)
+    version = _read_apkindex_version(index_path, APK_TOOLS_STATIC_PACKAGE, work_dir)
+    package_path = work_dir / f"{APK_TOOLS_STATIC_PACKAGE}-{version}.apk"
+    _download(f"{base_url}/{package_path.name}", package_path)
+    tools_dir = work_dir / "apk-tools"
+    tools_dir.mkdir()
+    # apk は複数の gzip ストリームを連結した tar なので、tar コマンドで展開する。
+    subprocess.run(
+        [_require_command("tar"), "-xzf", str(package_path), "-C", str(tools_dir)],
+        check=False,
+        stderr=subprocess.DEVNULL,
+    )
+    apk_static = tools_dir / "sbin" / "apk.static"
+    if not apk_static.is_file():
+        raise SysrootBuildError(f"apk.static was not found in {package_path.name}")
+    openssl = _require_command("openssl")
+    for key in sorted(keys_dir.iterdir()):
+        signature = tools_dir / "sbin" / f"apk.static.SIGN.RSA.sha256.{key.name}"
+        if not signature.is_file():
+            continue
+        _run_command(
+            [
+                openssl,
+                "dgst",
+                "-sha256",
+                "-verify",
+                str(key),
+                "-signature",
+                str(signature),
+                str(apk_static),
+            ]
+        )
+        apk_static.chmod(0o755)
+        return apk_static
+    raise SysrootBuildError("apk.static is not signed by any configured key")
+
+
+def _install_apk_packages(config: SysrootConfig, work_dir: Path, new_root: Path) -> list[str]:
+    # apk は鍵のファイル名で署名を照合するため、鍵は元のファイル名のまま並べる。
+    keys_dir = work_dir / "keys"
+    keys_dir.mkdir()
+    for repository in config.repositories:
+        shutil.copyfile(repository.signed_by, keys_dir / repository.signed_by.name)
+    tools_keys_dir = keys_dir
+    if config.tools_signed_by is not None:
+        tools_keys_dir = work_dir / "tools-keys"
+        tools_keys_dir.mkdir()
+        shutil.copyfile(config.tools_signed_by, tools_keys_dir / config.tools_signed_by.name)
+    apk_static = _prepare_apk_static(config, work_dir, tools_keys_dir)
+    repository_args = []
+    for repository in config.repositories:
+        for component in repository.components:
+            repository_args += ["-X", f"{repository.url}/{repository.suite}/{component}"]
+    # --no-scripts でパッケージのスクリプトを実行しないため root 権限は要らない。
+    # ファイルの所有者を変更できない警告は出るが、インストール自体は成功する。
+    _run_command(
+        [
+            str(apk_static),
+            "--root",
+            str(new_root),
+            "--initdb",
+            "--arch",
+            config.arch,
+            "--no-scripts",
+            "--no-cache",
+            "--keys-dir",
+            str(keys_dir),
+            "--repositories-file",
+            "/dev/null",
+            *repository_args,
+            "add",
+            *config.packages,
+        ]
+    )
+    installed = (new_root / "lib" / "apk" / "db" / "installed").read_text(encoding="utf-8")
+    return [line[2:] for line in installed.splitlines() if line.startswith("P:")]
+
+
 def _merge_into_usr(legacy_path: Path, merged_path: Path) -> None:
     """legacy_path の中身を merged_path へ移し、legacy_path を削除する。
 
@@ -367,7 +542,8 @@ def _fix_absolute_symlinks(root: Path) -> None:
             continue
         # /etc/alternatives 経由のリンクなど、展開だけでは実体が存在しない
         # リンク先は張り替えの根拠がないためそのまま残す。
-        target_in_sysroot = root / target.relative_to("/")
+        # "//usr/..." のように先頭の / が重なったリンク先もあるため、まとめて取り除く。
+        target_in_sysroot = root / str(target).lstrip("/")
         if not target_in_sysroot.exists():
             continue
         relative_target = os.path.relpath(target_in_sysroot, start=path.parent)
@@ -395,6 +571,9 @@ def _link_pkgconfig_files(root: Path, triplet: str) -> None:
 def _postprocess_sysroot(root: Path, triplet: str) -> None:
     # maintainer script を実行しない展開方式の穴を埋める後処理をまとめて行う。
     # 後処理の内容を変えたら MANIFEST_VERSION をインクリメントすること。
+    if (root / "lib" / "apk").is_dir():
+        _fix_absolute_symlinks(root)
+        return
     _ensure_usrmerge_symlinks(root)
     _fix_absolute_symlinks(root)
     _link_pkgconfig_files(root, triplet)
@@ -458,8 +637,6 @@ def build_sysroot(config: SysrootConfig, output_dir: Path, *, force: bool = Fals
             f"Existing sysroot does not match the current config: {output_dir}; use --force"
         )
 
-    apt_get = _require_command("apt-get")
-    dpkg_deb = _require_command("dpkg-deb")
     output_dir.parent.mkdir(parents=True, exist_ok=True)
 
     # 作業ディレクトリは output_dir と同じ親に作り、
@@ -471,41 +648,14 @@ def build_sysroot(config: SysrootConfig, output_dir: Path, *, force: bool = Fals
         # TemporaryDirectory は 0700 で作られるため、
         # sysroot をそのまま参照しても支障がないよう権限を緩める。
         temporary_dir.chmod(0o755)
-        work_dir = temporary_dir / "apt"
+        work_dir = temporary_dir / config.package_format
         new_root = temporary_dir / "rootfs"
         work_dir.mkdir()
         new_root.mkdir()
-        _write_apt_files(config, work_dir)
-
-        environment = os.environ.copy()
-        environment["APT_CONFIG"] = str(work_dir / "apt.conf")
-        apt_options = _apt_options(work_dir)
-        _run_command([apt_get, *apt_options, "update"], environment=environment)
-        # --download-only により、依存解決とダウンロードだけを apt-get に任せる。
-        # インストール（＝maintainer script の実行）はしないので root 権限が要らない。
-        _run_command(
-            [
-                apt_get,
-                *apt_options,
-                "--download-only",
-                "--yes",
-                "--no-install-recommends",
-                "--no-install-suggests",
-                "install",
-                *config.packages,
-            ],
-            environment=environment,
-        )
-
-        # ダウンロード済みの deb をすべて sysroot へ展開する。
-        # dpkg-deb --extract はファイルを取り出すだけで maintainer script を実行しない。
-        archive_dir = work_dir / "state" / "cache" / "archives"
-        deb_files = sorted(archive_dir.glob("*.deb"))
-        if not deb_files:
-            raise SysrootBuildError(f"No deb packages were downloaded for: {config.name}")
-        logging.info("Extracting %d packages", len(deb_files))
-        for deb_file in deb_files:
-            _run_command([dpkg_deb, "--extract", str(deb_file), str(new_root)], log_command=False)
+        if config.package_format == "apk":
+            installed = _install_apk_packages(config, work_dir, new_root)
+        else:
+            installed = _install_deb_packages(config, work_dir, new_root)
 
         _postprocess_sysroot(new_root, config.triplet)
         # 生成が最後まで完了した sysroot にだけ manifest を書き込む。
@@ -516,7 +666,7 @@ def build_sysroot(config: SysrootConfig, output_dir: Path, *, force: bool = Fals
             "name": config.name,
             "arch": config.arch,
             "triplet": config.triplet,
-            "deb_files": [deb_file.name for deb_file in deb_files],
+            f"{config.package_format}_files": installed,
         }
         (new_root / MANIFEST_NAME).write_text(
             json.dumps(manifest_value, indent=2, sort_keys=True) + "\n", encoding="utf-8"

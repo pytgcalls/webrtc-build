@@ -176,6 +176,12 @@ jobs:
           - name: ubuntu-22.04_x86_64
             rust-target: x86_64-unknown-linux-gnu
             runs-on: ubuntu-22.04
+          - name: muslinux_x86_64
+            rust-target: x86_64-unknown-linux-musl
+            runs-on: ubuntu-24.04
+          - name: muslinux_armv8
+            rust-target: aarch64-unknown-linux-musl
+            runs-on: ubuntu-24.04
           - name: android
             rust-target: armv7-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
             runs-on: ubuntu-24.04
@@ -275,6 +281,12 @@ jobs:
       - uses: ./.github/actions/download
         with:
           platform: ubuntu-22.04_x86_64
+      - uses: ./.github/actions/download
+        with:
+          platform: muslinux_x86_64
+      - uses: ./.github/actions/download
+        with:
+          platform: muslinux_armv8
       - uses: ./.github/actions/download
         with:
           platform: android

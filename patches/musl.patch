@@ -1,0 +1,139 @@
+diff --git a/build/config/compiler_cpu_abi.gn b/build/config/compiler_cpu_abi.gn
+index ae62bab58..c35b13ae1 100644
+--- a/build/config/compiler_cpu_abi.gn
++++ b/build/config/compiler_cpu_abi.gn
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
+ 
+ import("//build/config/chromeos/args.gni")
++import("//build/config/sysroot.gni")
+ import("//build/toolchain/toolchain.gni")
+ 
+ if (current_cpu == "arm" || current_cpu == "arm64") {
+@@ -26,6 +27,10 @@ cpu_abi_cflags = []
+ cpu_abi_ldflags = []
+ cpu_abi_defines = []
+ 
++if (use_musl) {
++  cpu_abi_defines += [ "ANDROID_HOST_MUSL" ]
++}
++
+ if (is_chromeos_device && is_chromeos) {
+   if (current_cpu == "x64") {
+     cros_target = "--target=x86_64-cros-linux-gnu"
+@@ -48,7 +53,10 @@ if (is_chromeos_device && is_chromeos) {
+ if ((is_posix && !is_apple) || is_fuchsia) {
+   # simplicity we always explicitly set the architecture.
+   if (current_cpu == "x64") {
+-    if (is_clang && !is_android && !is_fuchsia && !is_chromeos_device) {
++    if (is_clang && use_musl) {
++      cpu_abi_cflags += [ "--target=x86_64-alpine-linux-musl" ]
++      cpu_abi_ldflags += [ "--target=x86_64-alpine-linux-musl" ]
++    } else if (is_clang && !is_android && !is_fuchsia && !is_chromeos_device) {
+       cpu_abi_cflags += [ "--target=x86_64-unknown-linux-gnu" ]
+       cpu_abi_ldflags += [ "--target=x86_64-unknown-linux-gnu" ]
+     } else {
+@@ -83,7 +91,10 @@ if ((is_posix && !is_apple) || is_fuchsia) {
+       "-mfloat-abi=$arm_float_abi",
+     ]
+   } else if (current_cpu == "arm64") {
+-    if (is_clang && !is_android && !is_fuchsia && !is_chromeos_device) {
++    if (is_clang && use_musl) {
++      cpu_abi_cflags += [ "--target=aarch64-alpine-linux-musl" ]
++      cpu_abi_ldflags += [ "--target=aarch64-alpine-linux-musl" ]
++    } else if (is_clang && !is_android && !is_fuchsia && !is_chromeos_device) {
+       cpu_abi_cflags += [ "--target=aarch64-linux-gnu" ]
+       cpu_abi_ldflags += [ "--target=aarch64-linux-gnu" ]
+     }
+diff --git a/build/config/sysroot.gni b/build/config/sysroot.gni
+index e7aaa1847..782e3b504 100644
+--- a/build/config/sysroot.gni
++++ b/build/config/sysroot.gni
+@@ -12,6 +12,13 @@ declare_args() {
+   # toolchain.
+   target_sysroot = ""
+ 
++  # Targets musl libc instead of glibc. Only applies to the default toolchain,
++  # host toolchains keep using glibc.
++  use_musl = false
++
++  # The path of the sysroot used when use_musl is set.
++  musl_sysroot = ""
++
+   # The path to directory containing linux sysroot images.
+   target_sysroot_dir = "//build/linux"
+ 
+@@ -21,7 +28,9 @@ declare_args() {
+ }
+ 
+ if (sysroot == "") {
+-  if (current_os == target_os && current_cpu == target_cpu &&
++  if (use_musl) {
++    sysroot = musl_sysroot
++  } else if (current_os == target_os && current_cpu == target_cpu &&
+       target_sysroot != "") {
+     sysroot = target_sysroot
+   } else if (is_android) {
+diff --git a/build/toolchain/gcc_toolchain.gni b/build/toolchain/gcc_toolchain.gni
+index 482f7c9e9..d28482899 100644
+--- a/build/toolchain/gcc_toolchain.gni
++++ b/build/toolchain/gcc_toolchain.gni
+@@ -134,6 +134,10 @@ template("single_gcc_toolchain") {
+       # Populate toolchain args from the invoker.
+       forward_variables_from(invoker_toolchain_args, "*")
+ 
++      if (!defined(invoker_toolchain_args.use_musl)) {
++        use_musl = false
++      }
++
+       # The host toolchain value computed by the default toolchain's setup
+       # needs to be passed through unchanged to all secondary toolchains to
+       # ensure that it's always the same, regardless of the values that may be
+diff --git a/build/toolchain/linux/BUILD.gn b/build/toolchain/linux/BUILD.gn
+index fa3d1ba0c..598c80daf 100644
+--- a/build/toolchain/linux/BUILD.gn
++++ b/build/toolchain/linux/BUILD.gn
+@@ -399,3 +399,19 @@ gcc_toolchain("loong64") {
+     is_clang = false
+   }
+ }
++
++clang_toolchain("musl_x64") {
++  toolchain_args = {
++    current_cpu = "x64"
++    current_os = "linux"
++    use_musl = true
++  }
++}
++
++clang_toolchain("musl_arm64") {
++  toolchain_args = {
++    current_cpu = "arm64"
++    current_os = "linux"
++    use_musl = true
++  }
++}
+diff --git a/modules/desktop_capture/linux/wayland/egl_dmabuf.h b/modules/desktop_capture/linux/wayland/egl_dmabuf.h
+index 7ccde63bb4..62f5b9abae 100644
+--- a/modules/desktop_capture/linux/wayland/egl_dmabuf.h
++++ b/modules/desktop_capture/linux/wayland/egl_dmabuf.h
+@@ -15,6 +15,7 @@
+ #include <EGL/eglplatform.h>
+ #include <GL/gl.h>
+ #include <gbm.h>
++#include <sys/types.h>
+ 
+ #include <cstdint>
+ #include <map>
+diff --git a/rtc_base/platform_thread_types.cc b/rtc_base/platform_thread_types.cc
+index 20bf4afc44..482b15ff44 100644
+--- a/rtc_base/platform_thread_types.cc
++++ b/rtc_base/platform_thread_types.cc
+@@ -12,7 +12,6 @@
+ 
+ // IWYU pragma: begin_keep
+ #if defined(WEBRTC_LINUX)
+-#include <linux/prctl.h>
+ #include <sys/prctl.h>
+ #include <sys/syscall.h>
+ 

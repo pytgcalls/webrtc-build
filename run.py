@@ -446,6 +446,43 @@ PATCHES = {
         "receive_channel_undemuxable_safety.patch",
         "dcsctp_t1_timer_backoff_cap.patch",
     ],
+    "muslinux_x86_64": [
+        "add_deps.patch",
+        "4k.patch",
+        "revive_proxy.patch",
+        "ssl_verify_callback_with_native_handle.patch",
+        "h265.patch",
+        "remove_crel.patch",
+        "unsafe_buffers_optout_list.patch",
+        "turn_tls_client_certificate.patch",
+        "logging_sink_min_severity.patch",
+        "receive_channel_undemuxable_safety.patch",
+        "dcsctp_t1_timer_backoff_cap.patch",
+        "musl.patch",
+    ],
+    "muslinux_armv8": [
+        "add_deps.patch",
+        "4k.patch",
+        "revive_proxy.patch",
+        "ssl_verify_callback_with_native_handle.patch",
+        "h265.patch",
+        "remove_crel.patch",
+        "unsafe_buffers_optout_list.patch",
+        "turn_tls_client_certificate.patch",
+        "logging_sink_min_severity.patch",
+        "receive_channel_undemuxable_safety.patch",
+        "dcsctp_t1_timer_backoff_cap.patch",
+        "musl.patch",
+    ],
+}
+
+# musl libc 向けのターゲット。Ubuntu からクロスコンパイルする
+MUSL_TARGETS = ("muslinux_x86_64", "muslinux_armv8")
+
+# musl 向けのターゲットごとの GN の target_cpu
+MUSL_TARGET_CPUS = {
+    "muslinux_x86_64": "x64",
+    "muslinux_armv8": "arm64",
 }
 
 # パッチ適用および差分表示で無視したいファイルは以下に追加する
@@ -1412,6 +1449,8 @@ RUST_TARGET_TRIPLES = {
     "ubuntu-24.04_armv8": "aarch64-unknown-linux-gnu",
     "ubuntu-26.04_armv8": "aarch64-unknown-linux-gnu",
     "raspberry-pi-os_armv8": "aarch64-unknown-linux-gnu",
+    "muslinux_x86_64": "x86_64-unknown-linux-musl",
+    "muslinux_armv8": "aarch64-unknown-linux-musl",
 }
 
 
@@ -1510,6 +1549,19 @@ def test_link_in(webrtc_src_dir: str, work_dir: str, target: str, arch: str) -> 
         # 実行できないホストでは、リンクできたことだけをテストの結果として報告する
         logging.info(f"skip running {binary} because it cannot run on this host")
         print(f"link_test: リンクに成功しました ({arch} の実行はこのホストでは行いません)")
+        return
+    if target in MUSL_TARGETS:
+        # ホストには musl のローダーが無いため、sysroot のローダーで実行する
+        with open(os.path.join(work_dir, "args.gn"), encoding="utf-8") as f:
+            r = re.search(r'^musl_sysroot\s*=\s*"(.*)"', f.read(), re.MULTILINE)
+        if r is None:
+            raise Exception(f"musl_sysroot is not found in {work_dir}/args.gn")
+        rootfs = r.group(1)
+        library_path = ":".join(os.path.join(rootfs, d) for d in ("usr/lib", "lib"))
+        loader = find_files(os.path.join(rootfs, "lib"), "ld-musl-*.so.1")
+        if not loader:
+            raise Exception(f"musl loader is not found in {rootfs}")
+        cmd([loader[0], "--library-path", library_path, binary])
         return
     cmd([binary])
 
@@ -1632,6 +1684,8 @@ SYSROOT_CONFIGS = {
     "ubuntu-22.04_armv8": "ubuntu-22.04_armv8.json",
     "ubuntu-24.04_armv8": "ubuntu-24.04_armv8.json",
     "ubuntu-26.04_armv8": "ubuntu-26.04_armv8.json",
+    "muslinux_x86_64": "muslinux_x86_64.json",
+    "muslinux_armv8": "muslinux_armv8.json",
 }
 
 
@@ -2107,6 +2161,20 @@ def build_webrtc(
                 'target_os="linux"',
                 "rtc_use_pipewire=true",
             ]
+        elif target in MUSL_TARGETS:
+            # ビルド中に実行するツール (protoc など) はホストの glibc 向けにビルドし、
+            # WebRTC だけを musl 向けの toolchain でビルドする。
+            # Rust の std は musl 向けのものが無いため、Rust の実装は使わない
+            gn_args += [
+                'target_os="linux"',
+                f'target_cpu="{MUSL_TARGET_CPUS[target]}"',
+                f'custom_toolchain="//build/toolchain/linux:musl_{MUSL_TARGET_CPUS[target]}"',
+                "use_musl=true",
+                f'musl_sysroot="{os.path.join(source_dir, "rootfs")}"',
+                "rtc_use_pipewire=true",
+                "rtc_rust=false",
+                "treat_warnings_as_errors=false",
+            ]
         else:
             raise Exception(f"Target {target} is not supported")
 
@@ -2428,6 +2496,8 @@ TARGETS = [
     "ubuntu-24.04_armv8",
     "ubuntu-26.04_armv8",
     "raspberry-pi-os_armv8",
+    "muslinux_x86_64",
+    "muslinux_armv8",
     "android",
     "android_sdk",
     "ios",
@@ -2464,6 +2534,7 @@ def check_target(target):
             "ubuntu-24.04_armv8",
             "ubuntu-26.04_armv8",
             "raspberry-pi-os_armv8",
+            *MUSL_TARGETS,
             "android",
             "android_sdk",
         ):
