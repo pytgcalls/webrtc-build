@@ -340,10 +340,10 @@ jobs:
       #
       # JitPack は未ビルドのバージョンの artifact をリクエストするとビルドする
       # build.log へのリクエストでビルドを起動し、 POM の取得で公開を確認する
-      - name: Publish libwebrtc.aar to JitPack
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME}"
-          BASE_URL="https://jitpack.io/com/github/shiguredo-webrtc-build/webrtc-build/${VERSION}"
-          curl -fsSL -m 1800 -o /dev/null "${BASE_URL}/build.log"
-          curl -fsSL -o /dev/null "${BASE_URL}/webrtc-build-${VERSION}.pom"
+      # - name: Publish libwebrtc.aar to JitPack
+      #   shell: bash
+      #   run: |
+      #     VERSION="${GITHUB_REF_NAME}"
+      #     BASE_URL="https://jitpack.io/com/github/shiguredo-webrtc-build/webrtc-build/${VERSION}"
+      #     curl -fsSL -m 1800 -o /dev/null "${BASE_URL}/build.log"
+      #     curl -fsSL -o /dev/null "${BASE_URL}/webrtc-build-${VERSION}.pom"
